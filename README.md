@@ -1,4 +1,4 @@
-# AI-Powered Disaster Early Warning System
+# AI-Powered Disaster Early Warning System using React, Springboot and AI/ML 
 
 This project is a full-stack AI-powered platform for disaster monitoring, incident reporting, and early warning. It integrates user reporting, real-time alerts, AI-based predictions, and multi-channel notifications to help communities and authorities respond effectively to natural disasters.
 
