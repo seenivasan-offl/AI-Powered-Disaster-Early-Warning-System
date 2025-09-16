@@ -68,6 +68,17 @@ mvn spring-boot:run
 
 text
 
+## Managing Sensitive Configuration
+
+> **Important:** The Twilio credentials (`twilio.sid` and `twilio.token`) have been removed from the `application.properties` file for security reasons. 
+
+### How to provide credentials now
+
+Set these as environment variables on your system before running the application:
+
+- **For Windows (PowerShell):**
+
+
 ### Frontend
 
 1. Install Node.js (16+).  
