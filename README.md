@@ -11,6 +11,7 @@ This project is a full-stack AI-powered platform for disaster monitoring, incide
 - [Frontend (React)](#frontend-react)  
 - [AI Service (Python)](#ai-service-python)  
 - [Setup & Running](#setup--running)  
+- [Managing Sensitive Configuration](#managing-sensitive-configuration)
 - [Features](#features)  
 - [Security](#security)  
 - [Contributing](#contributing)  
@@ -61,23 +62,12 @@ This project is a full-stack AI-powered platform for disaster monitoring, incide
 ### Backend
 
 1. Install Java 17+ and Maven.  
-2. Configure `application.properties` with database and secret keys (use environment variables for sensitive info).  
+2. Configure `application.properties` with database and secret keys or use environment variables for sensitive info.  
 3. Run:
 mvn clean package
 mvn spring-boot:run
 
 text
-
-## Managing Sensitive Configuration
-
-> **Important:** The Twilio credentials (`twilio.sid` and `twilio.token`) have been removed from the `application.properties` file for security reasons. 
-
-### How to provide credentials now
-
-Set these as environment variables on your system before running the application:
-
-- **For Windows (PowerShell):**
-
 
 ### Frontend
 
@@ -96,7 +86,7 @@ text
 
 1. Create and activate Python virtual environment:
 python -m venv venv
-source venv/bin/activate # or venv\Scripts\activate on Windows
+venv\Scripts\activate # On Windows
 
 text
 2. Install dependencies:
@@ -111,6 +101,32 @@ text
 python app.py
 
 text
+
+---
+
+## Managing Sensitive Configuration
+
+> **Important:** The Twilio credentials (`twilio.sid` and `twilio.token`) have been removed from the `application.properties` file for security reasons.
+
+### How to provide credentials now
+
+Set these as environment variables on your system before running the application:
+
+#### On Windows (PowerShell):
+setx TWILIO_SID "your_twilio_account_sid"
+setx TWILIO_TOKEN "your_twilio_auth_token"
+
+text
+> After running these commands, restart your terminal or IDE to apply changes.
+
+#### Loading credentials in Spring Boot
+In your `application.properties` (excluded from Git), use:
+twilio.sid=${TWILIO_SID}
+twilio.token=${TWILIO_TOKEN}
+
+text
+
+Spring Boot will automatically load these environment variables at runtime.
 
 ---
 
