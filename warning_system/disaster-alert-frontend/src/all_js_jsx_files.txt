@@ -1,0 +1,1723 @@
+======== C:\Users\seeni\OneDrive\Documents\newproj\disaster-alert-frontend\src\api.js ======== 
+
+import axios from "axios";
+
+const API_URL = "http://localhost:8081/api/";
+
+// =================== AUTH ===================
+export const signupUser = async (user) => {
+  const res = await axios.post(`${API_URL}auth/signup`, user);
+  return res.data;
+};
+
+export const loginUser = async (email, password) => {
+  const res = await axios.post(`${API_URL}auth/login`, { email, password });
+  return res.data.token;
+};
+
+// =================== ALERTS ===================
+export const fetchAlerts = async (token) => {
+  const res = await axios.get(`${API_URL}alerts/`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  return res.data;
+};
+
+export const addAlert = async (alert, token) => {
+  const res = await axios.post(`${API_URL}alerts/add`, alert, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  return res.data;
+};
+
+// =================== USERS ===================
+export const getAllUsers = async (token) => {
+  const res = await axios.get(`${API_URL}users/`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  return res.data;
+};
+
+export const getUserById = async (id, token) => {
+  const res = await axios.get(`${API_URL}users/${id}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  return res.data;
+};
+
+export const updateUser = async (id, updatedUser, token) => {
+  const res = await axios.put(`${API_URL}users/${id}`, updatedUser, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  return res.data;
+};
+
+export const deleteUser = async (id, token) => {
+  const res = await axios.delete(`${API_URL}users/${id}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  return res.data;
+};
+
+// =================== INCIDENTS ===================
+export const getPendingIncidents = async (token) => {
+  const res = await axios.get(`${API_URL}incidents/pending`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  return res.data;
+};
+
+export const approveIncident = async (id, token) => {
+  const res = await axios.post(`${API_URL}incidents/${id}/approve`, null, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  return res.data;
+};
+
+export const rejectIncident = async (id, token) => {
+  const res = await axios.post(`${API_URL}incidents/${id}/reject`, null, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  return res.data;
+};
+
+export async function fetchWeatherData(city) {
+  const res = await fetch(`http://localhost:8081/api/weather/current/${city}`);
+  if (!res.ok) {
+    throw new Error("Failed to fetch weather data");
+  }
+  return await res.json();
+}
+
+======== C:\Users\seeni\OneDrive\Documents\newproj\disaster-alert-frontend\src\App.js ======== 
+import React from "react";
+import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
+import Navbar from "./components/Navbar";
+import AlertDashboard from "./components/AlertDashboard";
+import AddAlert from "./components/AddAlertForm";
+import IncidentReport from "./components/IncidentReportForm";
+import AdminPanel from "./components/AdminPanel";
+import Login from "./components/Login";
+import Signup from "./components/Signup";
+import WeatherSearch from "./components/WeatherSearch";
+import PrivateRoute from "./components/PrivateRoute";
+import AdminRoute from "./components/AdminRoute";
+import "./App.css";
+import HistoricalPredictionView from "./components/HistoricalPredictionView";
+import AIExperiment from "./components/AIExperiment";
+
+function App() {
+  return (
+    <Router>
+      <Navbar />
+      <Routes>
+        {/* Protected routes */}
+        <Route path="/" element={<PrivateRoute><AlertDashboard /></PrivateRoute>} />
+        <Route path="/add-alert" element={<PrivateRoute><AddAlert /></PrivateRoute>} />
+        <Route path="/report-incident" element={<PrivateRoute><IncidentReport /></PrivateRoute>} />
+        <Route path="/weather" element={<PrivateRoute><WeatherSearch location="Chennai" /></PrivateRoute>} />
+        <Route path="/historical-predictions" element={<HistoricalPredictionView />} />
+        <Route path="/ai-demo" element={<PrivateRoute><AIExperiment /></PrivateRoute>} />
+        {/* Admin-only route */}
+        <Route path="/admin" element={<AdminRoute><AdminPanel /></AdminRoute>} />
+
+        {/* Public routes */}
+        <Route path="/login" element={<Login />} />
+        <Route path="/signup" element={<Signup />} />
+      </Routes>
+    </Router>
+  );
+}
+
+export default App;
+======== C:\Users\seeni\OneDrive\Documents\newproj\disaster-alert-frontend\src\App.test.js ======== 
+import { render, screen } from '@testing-library/react';
+import App from './App';
+
+test('renders learn react link', () => {
+  render(<App />);
+  const linkElement = screen.getByText(/learn react/i);
+  expect(linkElement).toBeInTheDocument();
+});
+======== C:\Users\seeni\OneDrive\Documents\newproj\disaster-alert-frontend\src\index.js ======== 
+import React from 'react';
+import ReactDOM from 'react-dom/client';
+import './index.css';
+import App from './App';
+import reportWebVitals from './reportWebVitals';
+
+const root = ReactDOM.createRoot(document.getElementById('root'));
+root.render(
+  <React.StrictMode>
+    <App />
+  </React.StrictMode>
+);
+
+// If you want to start measuring performance in your app, pass a function
+// to log results (for example: reportWebVitals(console.log))
+// or send to an analytics endpoint. Learn more: https://bit.ly/CRA-vitals
+reportWebVitals();
+======== C:\Users\seeni\OneDrive\Documents\newproj\disaster-alert-frontend\src\PrivateRoute.js ======== 
+import { Navigate } from "react-router-dom";
+
+const PrivateRoute = ({ children }) => {
+  const token = localStorage.getItem("token");
+  return token ? children : <Navigate to="/login" />;
+};
+
+export default PrivateRoute;
+======== C:\Users\seeni\OneDrive\Documents\newproj\disaster-alert-frontend\src\reportWebVitals.js ======== 
+const reportWebVitals = onPerfEntry => {
+  if (onPerfEntry && onPerfEntry instanceof Function) {
+    import('web-vitals').then(({ getCLS, getFID, getFCP, getLCP, getTTFB }) => {
+      getCLS(onPerfEntry);
+      getFID(onPerfEntry);
+      getFCP(onPerfEntry);
+      getLCP(onPerfEntry);
+      getTTFB(onPerfEntry);
+    });
+  }
+};
+
+export default reportWebVitals;
+======== C:\Users\seeni\OneDrive\Documents\newproj\disaster-alert-frontend\src\setupTests.js ======== 
+// jest-dom adds custom jest matchers for asserting on DOM nodes.
+// allows you to do things like:
+// expect(element).toHaveTextContent(/react/i)
+// learn more: https://github.com/testing-library/jest-dom
+import '@testing-library/jest-dom';
+======== C:\Users\seeni\OneDrive\Documents\newproj\disaster-alert-frontend\src\components\AddAlertForm.js ======== 
+import React, { useState } from "react";
+import axios from "axios";
+import {
+  Box,
+  Button,
+  MenuItem,
+  Select,
+  TextField,
+  Typography,
+  Snackbar,
+  Alert,
+} from "@mui/material";
+import { MapContainer, TileLayer, Marker, useMapEvents } from "react-leaflet";
+import "leaflet/dist/leaflet.css";
+import L from "leaflet";
+
+// Fix Leaflet marker icons paths
+delete L.Icon.Default.prototype._getIconUrl;
+L.Icon.Default.mergeOptions({
+  iconRetinaUrl:
+    "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon-2x.png",
+  iconUrl:
+    "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon.png",
+  shadowUrl:
+    "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png",
+});
+
+function LocationPicker({ position, setPosition, setAreaName }) {
+  useMapEvents({
+    click: async (e) => {
+      const { lat, lng } = e.latlng;
+      setPosition([lat, lng]);
+
+      try {
+        const res = await axios.get(
+          `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`
+        );
+        const address = res.data.address;
+        const name =
+          address.city ||
+          address.town ||
+          address.village ||
+          address.county ||
+          "Unknown Area";
+        setAreaName(name);
+      } catch {
+        setAreaName("Unknown Area");
+      }
+    },
+  });
+  return position ? <Marker position={position} /> : null;
+}
+
+export default function AddAlertForm() {
+  const [disasterType, setDisasterType] = useState("Flood");
+  const [severityScore, setSeverityScore] = useState(5);
+  const [position, setPosition] = useState(null);
+  const [areaName, setAreaName] = useState("");
+  const [description, setDescription] = useState("");
+  const [snackbar, setSnackbar] = useState({ open: false, message: "", severity: "info" });
+  const token = localStorage.getItem("token");
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!position || !areaName) {
+      setSnackbar({ open: true, message: "Please select a location on the map.", severity: "warning" });
+      return;
+    }
+    if (severityScore < 0 || severityScore > 10) {
+      setSnackbar({ open: true, message: "Severity must be between 0 and 10.", severity: "warning" });
+      return;
+    }
+    try {
+      const payload = {
+        disasterType,
+        severityScore: parseFloat(severityScore),
+        location: areaName,
+        latitude: position[0],
+        longitude: position[1],
+        description,
+      };
+      await axios.post("http://localhost:8081/api/alerts/add", payload, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      setSnackbar({ open: true, message: "Alert added successfully!", severity: "success" });
+
+      // Reset form
+      setDisasterType("Flood");
+      setSeverityScore(5);
+      setPosition(null);
+      setAreaName("");
+      setDescription("");
+    } catch (err) {
+      setSnackbar({ open: true, message: err.response?.data?.error || "Failed to add alert.", severity: "error" });
+    }
+  };
+
+  return (
+    <Box maxWidth={600} mx="auto" mt={4} px={2}>
+      <Typography variant="h4" mb={3} align="center">
+        Add New Alert
+      </Typography>
+      <form onSubmit={handleSubmit} noValidate>
+        <Select
+          fullWidth
+          value={disasterType}
+          onChange={(e) => setDisasterType(e.target.value)}
+          sx={{ mb: 2 }}
+          required
+        >
+          {["Flood", "Earthquake", "Fire", "Storm", "Other"].map((option) => (
+            <MenuItem key={option} value={option}>{option}</MenuItem>
+          ))}
+        </Select>
+
+        <TextField
+          fullWidth
+          type="number"
+          label="Severity (0-10)"
+          value={severityScore}
+          onChange={(e) => setSeverityScore(e.target.value)}
+          inputProps={{ min: 0, max: 10 }}
+          required
+          sx={{ mb: 2 }}
+        />
+        <TextField
+          fullWidth
+          label="Description"
+          multiline
+          minRows={3}
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+          sx={{ mb: 2 }}
+        />
+
+        <Box height={400} mb={2}>
+          <MapContainer center={[10, 78]} zoom={6} style={{ height: "100%" }}>
+            <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+            <LocationPicker position={position} setPosition={setPosition} setAreaName={setAreaName} />
+          </MapContainer>
+        </Box>
+
+        <Typography variant="body2" mb={2}>
+          Click on the map to select location. Selected area: {areaName || "none"}
+        </Typography>
+
+        <Button variant="contained" size="large" type="submit" fullWidth>
+          Add Alert
+        </Button>
+      </form>
+
+      <Snackbar
+        open={snackbar.open}
+        autoHideDuration={5000}
+        onClose={() => setSnackbar({ ...snackbar, open: false })}
+        anchorOrigin={{ vertical: "top", horizontal: "center" }}
+      >
+        <Alert onClose={() => setSnackbar({ ...snackbar, open: false })} severity={snackbar.severity} variant="filled">
+          {snackbar.message}
+        </Alert>
+      </Snackbar>
+    </Box>
+  );
+}
+======== C:\Users\seeni\OneDrive\Documents\newproj\disaster-alert-frontend\src\components\AdminPanel.js ======== 
+// src/components/AdminPanel.js
+import React, { useEffect, useState } from "react";
+import {
+  getPendingIncidents,
+  approveIncident,
+  rejectIncident,
+} from "../api";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  Paper,
+  Button,
+  Typography,
+  Snackbar,
+  Alert,
+} from "@mui/material";
+
+export default function AdminPanel() {
+  const [incidents, setIncidents] = useState([]);
+  const [notification, setNotification] = useState({ open: false, message: "", severity: "info" });
+  const token = localStorage.getItem("token");
+
+  useEffect(() => {
+    const fetchPending = async () => {
+      try {
+        const data = await getPendingIncidents(token);
+        setIncidents(data);
+      } catch (err) {
+        console.error("Error fetching pending incidents:", err);
+        alert("Failed to fetch pending incidents.");
+      }
+    };
+    fetchPending();
+  }, [token]);
+
+  const handleApprove = async (id) => {
+    try {
+      await approveIncident(id, token);
+      setNotification({ open: true, message: "Incident approved!", severity: "success" });
+      const data = await getPendingIncidents(token);
+      setIncidents(data);
+    } catch (err) {
+      console.error(err);
+      setNotification({ open: true, message: "Failed to approve incident", severity: "error" });
+    }
+  };
+
+  const handleReject = async (id) => {
+    try {
+      await rejectIncident(id, token);
+      setNotification({ open: true, message: "Incident rejected!", severity: "warning" });
+      const data = await getPendingIncidents(token);
+      setIncidents(data);
+    } catch (err) {
+      console.error(err);
+      setNotification({ open: true, message: "Failed to reject incident", severity: "error" });
+    }
+  };
+
+  const getSeverityColor = (score) => {
+    if (score >= 7) return "red";
+    if (score >= 4) return "orange";
+    return "green";
+  };
+
+  return (
+    <div style={{ maxWidth: 1000, margin: "20px auto" }}>
+      <Typography variant="h4" gutterBottom>Admin Panel - Pending Incidents</Typography>
+
+      {incidents.length === 0 ? (
+        <Typography>No pending incidents.</Typography>
+      ) : (
+        <TableContainer component={Paper}>
+          <Table>
+            <TableHead>
+              <TableRow>
+                <TableCell>ID</TableCell>
+                <TableCell>User ID</TableCell>
+                <TableCell>Type</TableCell>
+                <TableCell>Description</TableCell>
+                <TableCell>Location</TableCell>
+                <TableCell>Severity</TableCell>
+                <TableCell>Timestamp</TableCell>
+                <TableCell>Actions</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {incidents.map((inc) => (
+                <TableRow key={inc.incidentId}>
+                  <TableCell>{inc.incidentId}</TableCell>
+                  <TableCell>{inc.userId}</TableCell>
+                  <TableCell>{inc.disasterType}</TableCell>
+                  <TableCell>{inc.description}</TableCell>
+                  <TableCell>{inc.location}</TableCell>
+                  <TableCell style={{ color: getSeverityColor(inc.severity), fontWeight: "bold" }}>
+                    {inc.severity}
+                  </TableCell>
+                  <TableCell>{new Date(inc.timestamp).toLocaleString()}</TableCell>
+                  <TableCell>
+                    <Button color="success" onClick={() => handleApprove(inc.incidentId)}>Approve</Button>
+                    <Button color="error" onClick={() => handleReject(inc.incidentId)}>Reject</Button>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </TableContainer>
+      )}
+
+      <Snackbar
+        open={notification.open}
+        autoHideDuration={3000}
+        onClose={() => setNotification({ ...notification, open: false })}
+        anchorOrigin={{ vertical: "top", horizontal: "center" }}
+      >
+        <Alert severity={notification.severity} variant="filled">{notification.message}</Alert>
+      </Snackbar>
+    </div>
+  );
+}
+======== C:\Users\seeni\OneDrive\Documents\newproj\disaster-alert-frontend\src\components\AIExperiment.js ======== 
+import React, { useState } from "react";
+import axios from "axios";
+
+export default function AIPredictionDemo() {
+  const [seq, setSeq] = useState("10,20,3");
+  const [socialText, setSocialText] = useState("Flood in Chennai city right now!");
+  const [location, setLocation] = useState("Chennai");  // default or blank
+  const [results, setResults] = useState({});
+
+  const callAI = async (type, payload) => {
+    try {
+      // include location in every payload
+      const body = { ...payload, location: location };
+      const res = await axios.post(`http://localhost:8081/api/ai/predict/${type}`, body);
+      setResults(prev => ({ ...prev, [type]: res.data }));
+    } catch (e) {
+      console.error(e);
+      alert(`Failed to call ${type}: ` + (e.response?.data?.error || e.message));
+    }
+  };
+
+  const handleCall = (type) => {
+    const arr = seq.split(",").map(s => parseFloat(s.trim()));
+    callAI(type, { sequence: arr });
+  };
+
+  return (
+    <div style={{ padding: 20 }}>
+      <h2>🌍 AI Disaster Prediction Demo</h2>
+
+      <div style={{ marginBottom: 20 }}>
+        <label>
+          Location:
+          <input
+            type="text"
+            value={location}
+            onChange={e => setLocation(e.target.value)}
+            placeholder="Enter location / city name"
+            style={{ marginLeft: 8 }}
+          />
+        </label>
+      </div>
+
+      <div style={{ marginBottom: 20 }}>
+        <h3>Sensor Data Input</h3>
+        <p>Enter numeric sequence (rainfall, water level, severity). Example: 10,20,3</p>
+        <input
+          value={seq}
+          onChange={(e) => setSeq(e.target.value)}
+          style={{ width: "60%" }}
+        />
+        <div style={{ marginTop: 10 }}>
+          <button onClick={() => handleCall("flood")}>🌊 Flood</button>
+          <button onClick={() => handleCall("fire")}>🔥 Fire</button>
+          <button onClick={() => handleCall("earthquake")}>🌎 Earthquake</button>
+          <button onClick={() => handleCall("storm")}>🌪 Storm</button>
+        </div>
+      </div>
+
+      <div style={{ marginBottom: 20 }}>
+        <h3>Social Media Input</h3>
+        <textarea
+          rows="3"
+          value={socialText}
+          onChange={(e) => setSocialText(e.target.value)}
+          style={{ width: "60%" }}
+        />
+        <div style={{ marginTop: 10 }}>
+          <button
+            onClick={() => callAI("social", { text: socialText })}
+          >
+            📝 Analyze Social Media
+          </button>
+        </div>
+      </div>
+
+      <div style={{ marginTop: 30 }}>
+        <h3>🔮 AI Results</h3>
+        {Object.keys(results).length === 0 && <p>No results yet.</p>}
+        {Object.entries(results).map(([key, value]) => (
+          <div
+            key={key}
+            style={{ marginTop: 12, padding: 12, border: "1px solid #ddd" }}
+          >
+            <h4>{key.toUpperCase()}</h4>
+            <p><b>Disaster:</b> {value.disaster_type}</p>
+            <p><b>Severity (0-100):</b> {value.severity}</p>
+            <p><b>Confidence (0-1):</b> {value.confidence}</p>
+            <p><b>Location:</b> {value.location}</p>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+======== C:\Users\seeni\OneDrive\Documents\newproj\disaster-alert-frontend\src\components\AlertDashboard.js ======== 
+// src/components/AlertDashboard.js
+import React, { useEffect, useState, useRef } from "react";
+import MapView from "./MapView";
+import { fetchAlerts } from "../api";
+import { Snackbar, Alert as MuiAlert, Typography, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper } from "@mui/material";
+
+const AlertDashboard = () => {
+  const [alerts, setAlerts] = useState([]);
+  const [notification, setNotification] = useState({ open: false, message: "" });
+  const previousAlertIds = useRef(new Set());
+  const token = localStorage.getItem("token");
+
+  const getSeverityColor = (score) => {
+    if (score >= 7) return "red";
+    if (score >= 4) return "orange";
+    return "green";
+  };
+
+  useEffect(() => {
+    const getAlerts = async () => {
+      try {
+        const data = await fetchAlerts(token);
+
+        // Show notification if a new alert appears
+        data.forEach((alert) => {
+          if (!previousAlertIds.current.has(alert.alertId)) {
+            previousAlertIds.current.add(alert.alertId);
+            setNotification({ open: true, message: `New Alert: ${alert.disasterType} at ${alert.location}` });
+          }
+        });
+
+        setAlerts(data);
+      } catch (err) {
+        console.error("Failed to fetch alerts:", err);
+      }
+    };
+
+    getAlerts();
+    const interval = setInterval(getAlerts, 30000); // refresh every 30s
+    return () => clearInterval(interval);
+  }, [token]);
+
+  return (
+    <div style={{ maxWidth: 1000, margin: "20px auto" }}>
+      <Typography variant="h4" gutterBottom>Alert Dashboard</Typography>
+
+      {/* Map with color-coded markers */}
+      <MapView alerts={alerts} getSeverityColor={getSeverityColor} />
+
+      {/* Alerts Table */}
+      <TableContainer component={Paper} style={{ marginTop: 20 }}>
+        <Table>
+          <TableHead>
+            <TableRow>
+              <TableCell>Disaster</TableCell>
+              <TableCell>Severity</TableCell>
+              <TableCell>Location</TableCell>
+              <TableCell>Status</TableCell>
+              <TableCell>Timestamp</TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {alerts.map((alert) => (
+              <TableRow key={alert.alertId}>
+                <TableCell>{alert.disasterType}</TableCell>
+                <TableCell style={{ color: getSeverityColor(alert.severityScore), fontWeight: "bold" }}>
+                  {alert.severityScore}
+                </TableCell>
+                <TableCell>{alert.location}</TableCell>
+                <TableCell>{alert.status}</TableCell>
+                <TableCell>{new Date(alert.timestamp).toLocaleString()}</TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </TableContainer>
+
+      {/* Snackbar notification */}
+      <Snackbar
+        open={notification.open}
+        autoHideDuration={5000}
+        onClose={() => setNotification({ ...notification, open: false })}
+        anchorOrigin={{ vertical: "top", horizontal: "center" }}
+      >
+        <MuiAlert severity="info" variant="filled">{notification.message}</MuiAlert>
+      </Snackbar>
+    </div>
+  );
+};
+
+export default AlertDashboard;
+======== C:\Users\seeni\OneDrive\Documents\newproj\disaster-alert-frontend\src\components\Dashboard.js ======== 
+// src/components/Dashboard.jsx
+import React, { useEffect, useState, useRef } from "react";
+import { Snackbar, Alert as MuiAlert, Typography, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper } from "@mui/material";
+import MapView from "./MapView";
+import axios from "axios";
+
+const BASE_URL = "http://localhost:8081/api"; // Change if your backend URL is different
+
+const Dashboard = () => {
+  const [alerts, setAlerts] = useState([]);
+  const [notification, setNotification] = useState({ open: false, message: "" });
+  const previousAlertIds = useRef(new Set());
+  const token = localStorage.getItem("token");
+
+  const getSeverityColor = (score) => {
+    if (score >= 7) return "red";      // High
+    if (score >= 4) return "orange";   // Medium
+    return "green";                     // Low
+  };
+
+  const fetchAlerts = async () => {
+    try {
+      const res = await axios.get(`${BASE_URL}/alerts`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      const data = res.data;
+
+      // Notify if a new alert is received
+      data.forEach((alert) => {
+        if (!previousAlertIds.current.has(alert.alertId)) {
+          previousAlertIds.current.add(alert.alertId);
+          setNotification({ open: true, message: `New Alert: ${alert.disasterType} at ${alert.location}` });
+        }
+      });
+
+      setAlerts(data);
+    } catch (err) {
+      console.error("Failed to fetch alerts:", err);
+    }
+  };
+
+  useEffect(() => {
+    fetchAlerts();
+    const interval = setInterval(fetchAlerts, 30000); // refresh every 30 seconds
+    return () => clearInterval(interval);
+  }, [token]);
+
+  return (
+    <div style={{ maxWidth: 1000, margin: "20px auto" }}>
+      <Typography variant="h4" gutterBottom>Disaster Dashboard</Typography>
+
+      {/* Map showing alerts */}
+      <MapView alerts={alerts} getSeverityColor={getSeverityColor} />
+
+      {/* Alerts Table */}
+      <TableContainer component={Paper} style={{ marginTop: 20 }}>
+        <Table>
+          <TableHead>
+            <TableRow>
+              <TableCell>Disaster</TableCell>
+              <TableCell>Severity</TableCell>
+              <TableCell>Location</TableCell>
+              <TableCell>Status</TableCell>
+              <TableCell>Timestamp</TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {alerts.map((alert) => (
+              <TableRow key={alert.alertId}>
+                <TableCell>{alert.disasterType}</TableCell>
+                <TableCell style={{ color: getSeverityColor(alert.severityScore), fontWeight: "bold" }}>
+                  {alert.severityScore}
+                </TableCell>
+                <TableCell>{alert.location}</TableCell>
+                <TableCell>{alert.status}</TableCell>
+                <TableCell>{new Date(alert.timestamp).toLocaleString()}</TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </TableContainer>
+
+      {/* Snackbar Notification */}
+      <Snackbar
+        open={notification.open}
+        autoHideDuration={5000}
+        onClose={() => setNotification({ ...notification, open: false })}
+        anchorOrigin={{ vertical: "top", horizontal: "center" }}
+      >
+        <MuiAlert severity="info" variant="filled">
+          {notification.message}
+        </MuiAlert>
+      </Snackbar>
+    </div>
+  );
+};
+
+export default Dashboard;
+======== C:\Users\seeni\OneDrive\Documents\newproj\disaster-alert-frontend\src\components\IncidentReportForm.js ======== 
+// src/components/IncidentReportForm.js
+import React, { useState } from "react";
+import axios from "axios";
+import { MapContainer, TileLayer, Marker, useMapEvents } from "react-leaflet";
+import "leaflet/dist/leaflet.css";
+import L from "leaflet";
+
+// Fix Leaflet marker icon paths in React
+delete L.Icon.Default.prototype._getIconUrl;
+L.Icon.Default.mergeOptions({
+  iconRetinaUrl:
+    "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon-2x.png",
+  iconUrl:
+    "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon.png",
+  shadowUrl:
+    "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png",
+});
+
+// Component to pick location by clicking on the map
+function LocationPicker({ position, setPosition, setAreaName }) {
+  useMapEvents({
+    click: async (e) => {
+      const lat = e.latlng.lat;
+      const lng = e.latlng.lng;
+      setPosition([lat, lng]);
+
+      try {
+        const res = await axios.get(
+          `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`
+        );
+        const address = res.data.address || {};
+        const name =
+          address.city ||
+          address.town ||
+          address.village ||
+          address.county ||
+          "Unknown Area";
+        setAreaName(name);
+      } catch (err) {
+        console.error("Geocoding error:", err);
+        setAreaName("Unknown Area");
+      }
+    },
+  });
+
+  return position ? <Marker position={position} /> : null;
+}
+
+export default function IncidentReportForm() {
+  const [disasterType, setDisasterType] = useState("Flood");
+  const [description, setDescription] = useState("");
+  const [position, setPosition] = useState(null);
+  const [areaName, setAreaName] = useState("");
+  const [severity, setSeverity] = useState(5);
+  const [aiSeverity, setAiSeverity] = useState(null);
+  const [loading, setLoading] = useState(false);
+
+  const token = localStorage.getItem("token");
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+
+    if (!position || !areaName) {
+      alert("Please select a location on the map.");
+      return;
+    }
+
+    if (severity < 0 || severity > 10) {
+      alert("Severity must be between 0 and 10.");
+      return;
+    }
+
+    try {
+      setLoading(true);
+
+      // 1️⃣ Call AI prediction service first
+      const aiPayload = {
+        location: areaName,
+        rainfall: Math.floor(Math.random() * 100), // TODO: replace with real sensor values
+        water_level: Math.floor(Math.random() * 10),
+      };
+
+      const aiResponse = await axios.post(
+        "http://localhost:8081/api/alerts/predict-ai",
+        aiPayload,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+
+      const aiScore = aiResponse.data.severityScore || 0;
+      setAiSeverity(aiScore);
+
+      // 2️⃣ Report the incident (include AI score)
+      const incidentPayload = {
+        disasterType,
+        description,
+        location: areaName,
+        latitude: position[0],
+        longitude: position[1],
+        severity: parseFloat(severity),
+        aiSeverity: aiScore, // 🔥 Save AI prediction in DB too
+      };
+
+      await axios.post(
+        "http://localhost:8081/api/incidents/report",
+        incidentPayload,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+
+      alert("✅ Incident reported successfully with AI prediction!");
+
+      // Reset
+      setDescription("");
+      setPosition(null);
+      setAreaName("");
+      setDisasterType("Flood");
+      setSeverity(5);
+      setAiSeverity(null);
+    } catch (err) {
+      console.error(err);
+      alert(
+        "Error reporting incident: " +
+          (err.response?.data?.error || err.message)
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div style={{ maxWidth: 800, margin: "0 auto" }}>
+      <h2>Report an Incident</h2>
+      <form onSubmit={handleSubmit}>
+        <label>
+          Disaster Type:
+          <select
+            value={disasterType}
+            onChange={(e) => setDisasterType(e.target.value)}
+          >
+            <option>Flood</option>
+            <option>Earthquake</option>
+            <option>Fire</option>
+            <option>Storm</option>
+            <option>Other</option>
+          </select>
+        </label>
+        <br />
+        <label>
+          Severity (0-10):
+          <input
+            type="number"
+            min="0"
+            max="10"
+            value={severity}
+            onChange={(e) => setSeverity(Number(e.target.value))}
+            required
+          />
+        </label>
+        <br />
+        <label>
+          Description:
+          <textarea
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            required
+          />
+        </label>
+        <br />
+        <div style={{ height: 400, margin: "10px 0" }}>
+          <MapContainer center={[10.0, 78.0]} zoom={6} style={{ height: "100%" }}>
+            <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+            <LocationPicker
+              position={position}
+              setPosition={setPosition}
+              setAreaName={setAreaName}
+            />
+          </MapContainer>
+        </div>
+        <p>
+          Click on the map to select location. Selected area:{" "}
+          {areaName || "none"}
+        </p>
+        {aiSeverity !== null && (
+          <p>
+            <b>AI Predicted Severity:</b> {aiSeverity}
+          </p>
+        )}
+        <button type="submit" disabled={loading}>
+          {loading ? "Submitting..." : "Submit Incident"}
+        </button>
+      </form>
+    </div>
+  );
+}
+======== C:\Users\seeni\OneDrive\Documents\newproj\disaster-alert-frontend\src\components\Login.js ======== 
+import { useState } from "react";
+import { loginUser } from "../api";
+import { useNavigate } from "react-router-dom";
+
+const Login = () => {
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const navigate = useNavigate();
+
+  const handleLogin = async (e) => {
+    e.preventDefault();
+    try {
+      const token = await loginUser(email, password);
+      localStorage.setItem("token", token);
+      navigate("/");
+    } catch (err) {
+      alert("Login failed");
+    }
+  };
+
+  return (
+    <div>
+      <h2>Login</h2>
+      <form onSubmit={handleLogin}>
+        <input placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} />
+        <input type="password" placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)} />
+        <button type="submit">Login</button>
+      </form>
+    </div>
+  );
+};
+
+export default Login;
+======== C:\Users\seeni\OneDrive\Documents\newproj\disaster-alert-frontend\src\components\MapView.js ======== 
+// src/components/MapView.js
+import React from "react";
+import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
+import L from "leaflet";
+import "leaflet/dist/leaflet.css";
+
+const MapView = ({ alerts, getSeverityColor }) => {
+  // Create a colored marker icon for Leaflet
+  const createMarkerIcon = (color) =>
+    new L.Icon({
+      iconUrl: `https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-${color}.png`,
+      shadowUrl:
+        "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png",
+      iconSize: [25, 41],
+      iconAnchor: [12, 41],
+      popupAnchor: [1, -34],
+      shadowSize: [41, 41],
+    });
+
+  return (
+    <div style={{ height: "400px", marginBottom: "20px" }}>
+      <MapContainer center={[20, 78]} zoom={5} style={{ height: "100%" }}>
+        <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+        {alerts.map((alert) => {
+          // Determine marker color based on severity
+          let color = "green";
+          if (getSeverityColor) {
+            const sev = alert.severityScore ?? 0;
+            if (sev >= 7) color = "red";
+            else if (sev >= 4) color = "orange";
+            else color = "green";
+          }
+
+          // Use provided lat/lng or fallback coordinates
+          const position = alert.locationLatLng
+            ? [alert.locationLatLng.lat, alert.locationLatLng.lng]
+            : alert.lat && alert.lng
+            ? [alert.lat, alert.lng]
+            : [20, 78]; // default center
+
+          return (
+            <Marker key={alert.alertId} position={position} icon={createMarkerIcon(color)}>
+              <Popup>
+                <b>{alert.disasterType}</b>
+                <br />
+                Severity: {alert.severityScore}
+                <br />
+                Location: {alert.location}
+                <br />
+                Status: {alert.status}
+              </Popup>
+            </Marker>
+          );
+        })}
+      </MapContainer>
+    </div>
+  );
+};
+
+export default MapView;
+======== C:\Users\seeni\OneDrive\Documents\newproj\disaster-alert-frontend\src\components\PrivateRoute.js ======== 
+import React from "react";
+import { Navigate } from "react-router-dom";
+
+const PrivateRoute = ({ children }) => {
+  const token = localStorage.getItem("token");
+  return token ? children : <Navigate to="/login" replace />;
+};
+
+export default PrivateRoute;
+======== C:\Users\seeni\OneDrive\Documents\newproj\disaster-alert-frontend\src\components\ReportAlert.js ======== 
+// src/components/ReportAlert.js
+import React, { useState } from "react";
+import { MapContainer, TileLayer, Marker, useMapEvents } from "react-leaflet";
+import "leaflet/dist/leaflet.css";
+import { addAlert } from "../api";
+
+// Map picker to select location and fetch area name
+function LocationPicker({ position, setPosition, setAreaName }) {
+  useMapEvents({
+    click: async (e) => {
+      const lat = e.latlng.lat;
+      const lng = e.latlng.lng;
+      setPosition([lat, lng]);
+      try {
+        const res = await fetch(
+          `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`
+        );
+        const data = await res.json();
+        const name =
+          data.address.city ||
+          data.address.town ||
+          data.address.village ||
+          data.address.county ||
+          "Unknown Area";
+        setAreaName(name);
+      } catch (err) {
+        console.error("Geocoding error:", err);
+        setAreaName("Unknown Area");
+      }
+    },
+  });
+
+  return position ? <Marker position={position} /> : null;
+}
+
+export default function ReportAlert() {
+  const [disasterType, setDisasterType] = useState("Flood");
+  const [severityScore, setSeverityScore] = useState(5);
+  const [position, setPosition] = useState(null);
+  const [areaName, setAreaName] = useState("");
+  const [description, setDescription] = useState("");
+
+  const token = localStorage.getItem("token");
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!position || !areaName) {
+      return alert("Please select a location on the map.");
+    }
+
+    const payload = {
+      disasterType,
+      severityScore: parseFloat(severityScore),
+      location: areaName,
+      latitude: position[0],
+      longitude: position[1],
+      description,
+    };
+
+    try {
+      await addAlert(payload, token);
+      alert("Alert reported successfully!");
+      // Reset form
+      setDisasterType("Flood");
+      setSeverityScore(5);
+      setPosition(null);
+      setAreaName("");
+      setDescription("");
+    } catch (err) {
+      console.error(err);
+      alert("Failed to report alert: " + (err.response?.data || err.message));
+    }
+  };
+
+  return (
+    <div style={{ maxWidth: 800, margin: "0 auto" }}>
+      <h2>Report New Alert</h2>
+      <form onSubmit={handleSubmit}>
+        <label>
+          Disaster Type:
+          <select value={disasterType} onChange={(e) => setDisasterType(e.target.value)}>
+            <option>Flood</option>
+            <option>Earthquake</option>
+            <option>Fire</option>
+            <option>Storm</option>
+            <option>Other</option>
+          </select>
+        </label>
+        <br />
+        <label>
+          Severity (0-10):
+          <input
+            type="number"
+            min="0"
+            max="10"
+            value={severityScore}
+            onChange={(e) => setSeverityScore(e.target.value)}
+            required
+          />
+        </label>
+        <br />
+        <label>
+          Description:
+          <textarea value={description} onChange={(e) => setDescription(e.target.value)} />
+        </label>
+        <br />
+        <div style={{ height: 400, margin: "10px 0" }}>
+          <MapContainer center={[10.0, 78.0]} zoom={6} style={{ height: "100%" }}>
+            <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+            <LocationPicker
+              position={position}
+              setPosition={setPosition}
+              setAreaName={setAreaName}
+            />
+          </MapContainer>
+        </div>
+        <p>Click on the map to select location. Selected area: {areaName || "none"}</p>
+        <button type="submit">Submit Alert</button>
+      </form>
+    </div>
+  );
+}
+======== C:\Users\seeni\OneDrive\Documents\newproj\disaster-alert-frontend\src\components\Signup.js ======== 
+import { useState } from "react";
+import { signupUser } from "../api";
+import { useNavigate } from "react-router-dom";
+
+const Signup = () => {
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
+  const [password, setPassword] = useState("");
+  const navigate = useNavigate();
+
+  const handleSignup = async (e) => {
+    e.preventDefault();
+    try {
+      await signupUser({ name, email, phone, password });
+      alert("Signup successful");
+      navigate("/login");
+    } catch (err) {
+      alert("Signup failed");
+    }
+  };
+
+  return (
+    <div>
+      <h2>Signup</h2>
+      <form onSubmit={handleSignup}>
+        <input placeholder="Name" value={name} onChange={(e) => setName(e.target.value)} />
+        <input placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} />
+        <input placeholder="Phone" value={phone} onChange={(e) => setPhone(e.target.value)} />
+        <input type="password" placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)} />
+        <button type="submit">Signup</button>
+      </form>
+    </div>
+  );
+};
+
+export default Signup;
+======== C:\Users\seeni\OneDrive\Documents\newproj\disaster-alert-frontend\src\components\WeatherSearch.js ======== 
+import React, { useEffect, useState } from "react";
+import { fetchWeatherData } from "../api";
+
+export default function WeatherSearch() {
+  const [location, setLocation] = useState("Chennai"); // Default city
+  const [weatherData, setWeatherData] = useState(null); // Single object for current weather
+  const [error, setError] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [input, setInput] = useState("");
+
+  // Fetch weather data when location changes
+  useEffect(() => {
+    if (!location) return;
+
+    const loadWeather = async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const data = await fetchWeatherData(location);
+        if (data.error) {
+          setError(data.error);
+          setWeatherData(null);
+        } else {
+          setWeatherData(data);
+        }
+      } catch (err) {
+        setError(err.message);
+        setWeatherData(null);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadWeather();
+  }, [location]);
+
+  // Search form submit handler
+  const onSearch = (e) => {
+    e.preventDefault();
+    if (input.trim()) {
+      setLocation(input.trim());
+    }
+  };
+
+  // Get current geolocation and reverse geocode city
+  const useCurrentLocation = () => {
+    if (!navigator.geolocation) {
+      alert("Geolocation not supported in your browser");
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      async ({ coords }) => {
+        try {
+          const res = await fetch(
+            `https://nominatim.openstreetmap.org/reverse?format=json&lat=${coords.latitude}&lon=${coords.longitude}`
+          );
+          const data = await res.json();
+          const city =
+            data.address?.city ||
+            data.address?.town ||
+            data.address?.village ||
+            data.address?.county ||
+            "";
+          if (city) {
+            setLocation(city);
+            setInput(city);
+          } else {
+            alert("Could not determine city from your location");
+          }
+        } catch {
+          alert("Failed to get city from your location");
+        }
+      },
+      () => alert("Permission to access location was denied")
+    );
+  };
+
+  return (
+    <div style={{ maxWidth: 700, margin: "1rem auto", padding: 20, fontFamily: "Arial, sans-serif" }}>
+      <h2 style={{ fontSize: 28, fontWeight: "bold", textAlign: "center", marginBottom: 20 }}>
+        🌤️ Weather Dashboard
+      </h2>
+
+      {/* Search bar */}
+      <form onSubmit={onSearch} style={{ marginBottom: 20, display: "flex", gap: 10, justifyContent: "center" }}>
+        <input
+          type="text"
+          placeholder="Enter city name"
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          style={{
+            flexGrow: 1,
+            padding: "10px",
+            fontSize: 16,
+            borderRadius: 6,
+            border: "1px solid #ccc",
+          }}
+        />
+        <button
+          type="submit"
+          style={{
+            padding: "10px 20px",
+            fontSize: 16,
+            cursor: "pointer",
+            backgroundColor: "#e53e3e",
+            color: "white",
+            border: "none",
+            borderRadius: 6,
+          }}
+        >
+          Search
+        </button>
+        <button
+          type="button"
+          onClick={useCurrentLocation}
+          style={{
+            padding: "10px 20px",
+            fontSize: 16,
+            cursor: "pointer",
+            backgroundColor: "#38a169",
+            color: "white",
+            border: "none",
+            borderRadius: 6,
+          }}
+        >
+          📍 Use My Location
+        </button>
+      </form>
+
+      {/* Status messages */}
+      {loading && (
+        <p style={{ color: "#3182ce", fontWeight: "bold", textAlign: "center" }}>
+          Loading weather data for {location}...
+        </p>
+      )}
+      {error && (
+        <p style={{ color: "#e53e3e", fontWeight: "bold", textAlign: "center" }}>
+          ⚠️ {error}
+        </p>
+      )}
+
+      {/* Weather data display */}
+      {weatherData && !error && (
+        <div>
+          <h3 style={{ fontSize: 22, fontWeight: "bold", marginBottom: 15, textAlign: "center" }}>
+            Weather Data for {weatherData.city}
+          </h3>
+
+          <table
+            style={{
+              width: "100%",
+              borderCollapse: "collapse",
+              textAlign: "left",
+              fontSize: 16,
+              boxShadow: "0 0 8px rgba(0,0,0,0.1)",
+            }}
+          >
+            <thead>
+              <tr style={{ backgroundColor: "#f7fafc" }}>
+                <th style={{ padding: 12, borderBottom: "2px solid #e2e8f0" }}>Timestamp</th>
+                <th style={{ padding: 12, borderBottom: "2px solid #e2e8f0" }}>Temperature (°C)</th>
+                <th style={{ padding: 12, borderBottom: "2px solid #e2e8f0" }}>Humidity (%)</th>
+                <th style={{ padding: 12, borderBottom: "2px solid #e2e8f0" }}>Rainfall (mm)</th>
+                <th style={{ padding: 12, borderBottom: "2px solid #e2e8f0" }}>Wind Speed (m/s)</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr style={{ transition: "background-color 0.3s", cursor: "default" }}>
+                <td style={{ padding: 12, borderBottom: "1px solid #e2e8f0" }}>
+                  {new Date(weatherData.timestamp).toLocaleString()}
+                </td>
+                <td style={{ padding: 12, borderBottom: "1px solid #e2e8f0" }}>
+                  {weatherData.temperature?.toFixed(1)}
+                </td>
+                <td style={{ padding: 12, borderBottom: "1px solid #e2e8f0" }}>
+                  {weatherData.humidity ?? "N/A"}
+                </td>
+                <td style={{ padding: 12, borderBottom: "1px solid #e2e8f0" }}>
+                  {weatherData.rainfall1h?.toFixed(1) ?? "0.0"}
+                </td>
+                <td style={{ padding: 12, borderBottom: "1px solid #e2e8f0" }}>
+                  {weatherData.windSpeed?.toFixed(1) ?? "N/A"}
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+======== C:\Users\seeni\OneDrive\Documents\newproj\disaster-alert-frontend\src\components\AdminRoute.jsx ======== 
+import React from "react";
+import { Navigate } from "react-router-dom";
+import { jwtDecode } from 'jwt-decode';
+
+
+const AdminRoute = ({ children }) => {
+  const token = localStorage.getItem("token");
+  if (!token) return <Navigate to="/login" replace />;
+
+  try {
+    const decoded = jwtDecode(token);
+    if (decoded.role === "ADMIN") {
+      return children;
+    }
+    return <Navigate to="/" replace />;
+  } catch {
+    return <Navigate to="/login" replace />;
+  }
+};
+
+export default AdminRoute;
+======== C:\Users\seeni\OneDrive\Documents\newproj\disaster-alert-frontend\src\components\AlertMarker.jsx ======== 
+// src/components/AlertMarker.jsx
+import React from "react";
+import { CircleMarker, Popup } from "react-leaflet";
+
+// Function to get color based on severity score (0-10)
+const getColor = (severity) => {
+  if (severity >= 7) return "#d73027"; // High severity - red
+  if (severity >= 4) return "#f46d43"; // Medium severity - orange
+  if (severity > 0) return "#fee08b";  // Low severity - yellow
+  return "#4575b4";                     // Safe / unknown - blue
+};
+
+export default function AlertMarker({ alert }) {
+  // Extract latitude and longitude from alert object
+  const lat = alert.lat ?? alert.location?.lat ?? 0;
+  const lng = alert.lng ?? alert.location?.lng ?? 0;
+
+  // Severity score
+  const severity = alert.severityScore ?? alert.severity ?? 0;
+
+  return (
+    <CircleMarker
+      center={[lat, lng]}
+      radius={12}
+      pathOptions={{ color: getColor(severity), fillOpacity: 0.7 }}
+    >
+      <Popup>
+        <div style={{ minWidth: 200 }}>
+          <strong>{alert.disasterType ?? alert.disaster_type}</strong><br />
+          Severity: {Math.round(severity)} / 10<br />
+          <small>{new Date(alert.timestamp).toLocaleString()}</small><br />
+          <small>Location: {alert.locationName ?? alert.location ?? "N/A"}</small>
+        </div>
+      </Popup>
+    </CircleMarker>
+  );
+}
+======== C:\Users\seeni\OneDrive\Documents\newproj\disaster-alert-frontend\src\components\AlertsMap.jsx ======== 
+// frontend/src/components/AlertsMap.jsx
+import React, { useEffect, useState } from 'react';
+import { MapContainer, TileLayer } from 'react-leaflet';
+import AlertMarker from './AlertMarker';
+import { fetchAlerts } from '../api';
+import { connectAlerts } from '../ws/wsClient';
+
+export default function AlertsMap() {
+  const [alerts, setAlerts] = useState([]);
+  const token = localStorage.getItem('token');
+
+  useEffect(() => {
+    // Fetch existing alerts from backend
+    const fetchInitialAlerts = async () => {
+      try {
+        const data = await fetchAlerts(token);
+        setAlerts(data);
+      } catch (err) {
+        console.error('Failed to fetch alerts:', err);
+      }
+    };
+    fetchInitialAlerts();
+
+    // Connect to WebSocket for real-time alerts
+    const client = connectAlerts(
+      (alert) => {
+        setAlerts((prev) => [alert, ...prev]); // newest first
+      },
+      token // optional: pass JWT if your WS backend requires authentication
+    );
+
+    // Cleanup on unmount
+    return () => {
+      client.deactivate();
+    };
+  }, [token]);
+
+  // Determine initial map center: first alert or default Chennai
+  const center = alerts.length
+    ? [alerts[0].location?.lat ?? alerts[0].lat, alerts[0].location?.lng ?? alerts[0].lng]
+    : [13.0827, 80.2707];
+
+  return (
+    <MapContainer center={center} zoom={8} style={{ height: '80vh', width: '100%' }}>
+      <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+      {alerts.map((a) => (
+        <AlertMarker key={a.alertId ?? a.incidentId} alert={a} />
+      ))}
+    </MapContainer>
+  );
+}
+======== C:\Users\seeni\OneDrive\Documents\newproj\disaster-alert-frontend\src\components\HistoricalPredictionView.jsx ======== 
+import React, { useState, useEffect } from "react";
+import axios from "axios";
+
+export default function HistoricalDataView() {
+  const [data, setData] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  const formatDate = (year, month, day) => {
+    if (!year) return "Unknown";
+    const m = month ? month.toString().padStart(2, "0") : "01";
+    const d = day ? day.toString().padStart(2, "0") : "01";
+    return `${year}-${m}-${d}`;
+  };
+
+  useEffect(() => {
+    async function fetchData() {
+      try {
+        const response = await axios.get("http://localhost:8081/api/alerts/historical-predictions");
+        setData(response.data);
+      } catch (error) {
+        console.error("Failed to fetch historical data", error);
+        alert("Failed to fetch historical data");
+      } finally {
+        setLoading(false);
+      }
+    }
+    fetchData();
+  }, []);
+
+  if (loading) return <p>Loading...</p>;
+
+  return (
+    <div style={{ maxWidth: "95%", margin: "auto" }}>
+      <h2>Historical Disaster Data</h2>
+
+      {data.length === 0 ? (
+        <p>No data available</p>
+      ) : (
+        <table style={{ width: "100%", borderCollapse: "collapse" }}>
+          <thead>
+            <tr style={{ background: "#f2f2f2" }}>
+              <th style={{ border: "1px solid #ccc", padding: "8px" }}>Disaster</th>
+              <th style={{ border: "1px solid #ccc", padding: "8px" }}>Country</th>
+              <th style={{ border: "1px solid #ccc", padding: "8px" }}>Region</th>
+              <th style={{ border: "1px solid #ccc", padding: "8px" }}>Date</th>
+              <th style={{ border: "1px solid #ccc", padding: "8px" }}>Deaths</th>
+              <th style={{ border: "1px solid #ccc", padding: "8px" }}>Affected</th>
+              <th style={{ border: "1px solid #ccc", padding: "8px" }}>Location</th>
+            </tr>
+          </thead>
+          <tbody>
+            {data.map((item, idx) => (
+              <tr key={idx}>
+                <td style={{ border: "1px solid #ccc", padding: "8px" }}>
+                  {item["Disaster Type"] || "N/A"}
+                </td>
+                <td style={{ border: "1px solid #ccc", padding: "8px" }}>
+                  {item["Country"] || "N/A"}
+                </td>
+                <td style={{ border: "1px solid #ccc", padding: "8px" }}>
+                  {item["Region"] || "N/A"}
+                </td>
+                <td style={{ border: "1px solid #ccc", padding: "8px" }}>
+                  {formatDate(item["Start Year"], item["Start Month"], item["Start Day"])}
+                </td>
+                <td style={{ border: "1px solid #ccc", padding: "8px" }}>
+                  {item["Total Deaths"] || "0"}
+                </td>
+                <td style={{ border: "1px solid #ccc", padding: "8px" }}>
+                  {item["Total Affected"] || "0"}
+                </td>
+                <td style={{ border: "1px solid #ccc", padding: "8px" }}>
+                  {item["Location"] || "N/A"}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </div>
+  );
+}
+======== C:\Users\seeni\OneDrive\Documents\newproj\disaster-alert-frontend\src\components\Navbar.jsx ======== 
+import React from "react";
+import { Link, useNavigate } from "react-router-dom";
+import { jwtDecode } from 'jwt-decode';
+
+
+const Navbar = () => {
+  const token = localStorage.getItem("token");
+  const navigate = useNavigate();
+
+  const getUserRole = () => {
+    if (!token) return null;
+    try {
+      const decoded = jwtDecode(token);
+      return decoded.role || null;
+    } catch {
+      return null;
+    }
+  };
+
+  const userRole = getUserRole();
+
+  const handleLogout = () => {
+    localStorage.removeItem("token");
+    navigate("/login");
+  };
+
+  return (
+    <nav style={{ display: "flex", gap: "1rem", padding: "1rem", backgroundColor: "#ea1010ff" }}>
+      {!token ? (
+        <>
+          <Link to="/login" style={{ color: "white", textDecoration: "none" }}>
+            Login
+          </Link>
+          <Link to="/signup" style={{ color: "white", textDecoration: "none" }}>
+            Signup
+          </Link>
+        </>
+      ) : (
+        <>
+          <Link to="/" style={{ color: "white", textDecoration: "none" }}>
+            Dashboard
+          </Link>
+          <Link to="/add-alert" style={{ color: "white", textDecoration: "none" }}>
+            Add Alert
+          </Link>
+          <Link to="/report-incident" style={{ color: "white", textDecoration: "none" }}>
+            Report Incident
+          </Link>
+          <Link to="/weather" style={{ color: "white", textDecoration: "none" }}>
+            Weather
+          </Link>
+            <Link to="/historical-predictions" style={{ color: "white", textDecoration: "none" }}>
+            Historical Predictions
+            </Link>
+            <Link to="/ai-demo" style={{ color: "white", textDecoration: "none" }} >AI Predictions</Link>
+          {userRole === "ADMIN" && (
+            <Link to="/admin" style={{ color: "white", textDecoration: "none" }}>
+              Admin Panel
+            </Link>
+          )}
+          <button
+            onClick={handleLogout}
+            style={{
+              backgroundColor: "#8b0000",
+              color: "white",
+              border: "none",
+              padding: "0.5rem 1rem",
+              borderRadius: "4px",
+              cursor: "pointer",
+            }}
+          >
+            Logout
+          </button>
+        </>
+      )}
+    </nav>
+  );
+};
+
+export default Navbar;
+======== C:\Users\seeni\OneDrive\Documents\newproj\disaster-alert-frontend\src\ws\wsClient.js ======== 
+// frontend/src/ws/wsClient.js
+import { Client } from '@stomp/stompjs';
+import SockJS from 'sockjs-client';
+
+/**
+ * Connect to the backend WebSocket and subscribe to alerts.
+ * @param {function} onAlert - Callback function called when a new alert is received.
+ * @returns {Client} STOMP client instance
+ */
+export function connectAlerts(onAlert) {
+  const client = new Client({
+    // Use SockJS for fallback
+    webSocketFactory: () => new SockJS('http://localhost:8080/ws'),
+    debug: () => {}, // disable debug logging
+    reconnectDelay: 5000, // reconnect every 5 seconds if disconnected
+  });
+
+  client.onConnect = () => {
+    // Subscribe to alerts topic
+    client.subscribe('/topic/alerts', (msg) => {
+      const payload = JSON.parse(msg.body);
+      onAlert(payload);
+    });
+  };
+
+  client.activate(); // start connection
+  return client;
+}

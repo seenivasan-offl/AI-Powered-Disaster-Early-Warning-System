@@ -1,0 +1,160 @@
+.App {
+  text-align: center;
+}
+
+.App-logo {
+  height: 40vmin;
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .App-logo {
+    animation: App-logo-spin infinite 20s linear;
+  }
+}
+
+.App-header {
+  background-color: #282c34;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  font-size: calc(10px + 2vmin);
+  color: white;
+}
+
+.App-link {
+  color: #61dafb;
+}
+
+@keyframes App-logo-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* General Reset */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+}
+
+/* Navbar */
+nav {
+  background: #1875d8;
+  padding: 1rem;
+  display: flex;
+  gap: 1.5rem;
+  align-items: center;
+}
+
+nav a,
+nav button {
+  color: white;
+  text-decoration: none;
+  font-weight: 500;
+  border: none;
+  background: none;
+  cursor: pointer;
+  transition: 0.2s;
+}
+
+nav a:hover,
+nav button:hover {
+  color: #ffd700;
+}
+
+/* Page Container */
+.container {
+  max-width: 1200px;
+  margin: 2rem auto;
+  padding: 1rem;
+}
+
+/* Dashboard Table */
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 1rem;
+  background: white;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+table th {
+  background: #2d3e50;
+  color: white;
+  padding: 12px;
+  text-align: left;
+}
+
+table td {
+  padding: 12px;
+  border-bottom: 1px solid #ddd;
+}
+
+table tr:hover {
+  background: #f1f1f1;
+}
+
+/* Form */
+form {
+  background: white;
+  padding: 2rem;
+  border-radius: 10px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+  max-width: 500px;
+  margin: auto;
+}
+
+form h2 {
+  margin-bottom: 1rem;
+  text-align: center;
+}
+
+form input,
+form select,
+form textarea {
+  width: 100%;
+  padding: 10px;
+  margin: 10px 0;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+}
+
+form button {
+  width: 100%;
+  padding: 12px;
+  background: #1784f9;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 16px;
+}
+
+form button:hover {
+  background: #ffd700;
+  color: black;
+}
+
+/* Headings */
+h2 {
+  margin-bottom: 1rem;
+  text-align: center;
+  color: #2d3e50;
+}
+
+/* Map */
+.leaflet-container {
+  border-radius: 10px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+  margin-bottom: 1.5rem;
+}

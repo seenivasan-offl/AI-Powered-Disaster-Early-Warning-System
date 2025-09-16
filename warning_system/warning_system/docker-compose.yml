@@ -1,0 +1,52 @@
+version: "3.8"
+
+services:
+  postgres:
+    image: postgres:15
+    environment:
+      POSTGRES_DB: disasterdb
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: pass
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+
+  rabbitmq:
+    image: rabbitmq:3-management
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+
+  ai_service:
+    build: ./ai_service
+    ports:
+      - "5001:5001"
+    depends_on:
+      - rabbitmq
+    environment:
+      - RABBITMQ_HOST=rabbitmq
+
+  backend:
+    build: ./backend
+    ports:
+      - "8080:8080"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/disasterdb
+      SPRING_DATASOURCE_USERNAME: user
+      SPRING_DATASOURCE_PASSWORD: pass
+      OPENWEATHER_APIKEY: ${OPENWEATHER_APIKEY}
+    depends_on:
+      - postgres
+      - rabbitmq
+      - ai_service
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "3000:3000"
+    environment:
+      REACT_APP_API_URL: http://localhost:8081
+
+volumes:
+  pgdata:

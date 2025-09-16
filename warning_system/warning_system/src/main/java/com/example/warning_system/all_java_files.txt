@@ -1,0 +1,2037 @@
+======== C:\Users\seeni\OneDrive\Documents\warning_system\warning_system\src\main\java\com\example\warning_system\WarningSystemApplication.java ======== 
+package com.example.warning_system;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.context.annotation.Bean;
+import org.springframework.scheduling.annotation.EnableAsync;
+
+@SpringBootApplication
+@EnableAsync
+public class WarningSystemApplication {
+
+	public static void main(String[] args) {
+		SpringApplication.run(WarningSystemApplication.class, args);
+	}
+
+	@Bean
+	public ObjectMapper objectMapper() {
+		ObjectMapper mapper = new ObjectMapper();
+		mapper.registerModule(new JavaTimeModule());
+		mapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
+		return mapper;
+	}
+}
+
+======== C:\Users\seeni\OneDrive\Documents\warning_system\warning_system\src\main\java\com\example\warning_system\config\AppConfig.java ======== 
+package com.example.warning_system.config;
+
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.web.client.RestTemplate;
+
+@Configuration
+public class AppConfig {
+
+    @Bean
+    public RestTemplate restTemplate() {
+        return new RestTemplate();
+    }
+}
+======== C:\Users\seeni\OneDrive\Documents\warning_system\warning_system\src\main\java\com\example\warning_system\config\JwtAuthenticationEntryPoint.java ======== 
+package com.example.warning_system.config;
+
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import org.springframework.security.core.AuthenticationException;
+import org.springframework.security.web.AuthenticationEntryPoint;
+import org.springframework.stereotype.Component;
+
+import java.io.IOException;
+
+@Component
+public class JwtAuthenticationEntryPoint implements AuthenticationEntryPoint {
+
+    @Override
+    public void commence(HttpServletRequest request, HttpServletResponse response,
+                         AuthenticationException authException) throws IOException {
+        response.sendError(HttpServletResponse.SC_UNAUTHORIZED, "Unauthorized: " + authException.getMessage());
+    }
+}
+======== C:\Users\seeni\OneDrive\Documents\warning_system\warning_system\src\main\java\com\example\warning_system\config\JwtRequestFilter.java ======== 
+package com.example.warning_system.config;
+
+import com.example.warning_system.service.JwtUserDetailsService;
+import com.example.warning_system.service.JwtUtil;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.security.web.authentication.WebAuthenticationDetailsSource;
+import org.springframework.stereotype.Component;
+import org.springframework.web.filter.OncePerRequestFilter;
+
+import jakarta.servlet.FilterChain;
+import jakarta.servlet.ServletException;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import java.io.IOException;
+
+@Component
+public class JwtRequestFilter extends OncePerRequestFilter {
+
+    @Autowired
+    private JwtUtil jwtUtil;
+
+    @Autowired
+    private JwtUserDetailsService userDetailsService;
+
+    @Override
+    protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response,
+                                    FilterChain filterChain) throws ServletException, IOException {
+
+        String path = request.getRequestURI();
+
+        // ✅ Skip public endpoints
+        if (path.startsWith("/api/auth") ||
+                path.startsWith("/swagger-ui") ||
+                path.startsWith("/v3/api-docs") ||
+                path.startsWith("/swagger-resources") ||
+                path.startsWith("/webjars") ||
+                path.startsWith("/swagger-ui.html")) {
+            filterChain.doFilter(request, response);
+            return;
+        }
+
+        final String authorizationHeader = request.getHeader("Authorization");
+
+        String username = null;
+        String jwt = null;
+
+        if (authorizationHeader != null && authorizationHeader.startsWith("Bearer ")) {
+            jwt = authorizationHeader.substring(7);
+            username = jwtUtil.extractUsername(jwt);
+        }
+
+        if (username != null && SecurityContextHolder.getContext().getAuthentication() == null) {
+            UserDetails userDetails = this.userDetailsService.loadUserByUsername(username);
+
+            if (jwtUtil.validateToken(jwt, userDetails)) {
+                UsernamePasswordAuthenticationToken authToken =
+                        new UsernamePasswordAuthenticationToken(
+                                userDetails, null, userDetails.getAuthorities());
+                authToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
+                SecurityContextHolder.getContext().setAuthentication(authToken);
+            }
+        }
+
+        filterChain.doFilter(request, response);
+    }
+}
+======== C:\Users\seeni\OneDrive\Documents\warning_system\warning_system\src\main\java\com\example\warning_system\config\RabbitConfig.java ======== 
+package com.example.warning_system.config;
+
+import org.springframework.amqp.core.TopicExchange;
+import org.springframework.amqp.rabbit.connection.CachingConnectionFactory;
+import org.springframework.amqp.rabbit.core.RabbitTemplate;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+
+@Configuration
+public class RabbitConfig {
+
+    @Bean
+    public TopicExchange sensorExchange() {
+        return new TopicExchange("sensors.exchange");
+    }
+
+    @Bean
+    public CachingConnectionFactory connectionFactory() {
+        CachingConnectionFactory factory = new CachingConnectionFactory("localhost");
+//                                 ^^^ CHANGED HERE from "rabbitmq" to "localhost"
+        factory.setUsername("guest");
+        factory.setPassword("guest");
+        return factory;
+    }
+
+    @Bean
+    public RabbitTemplate rabbitTemplate(CachingConnectionFactory connectionFactory) {
+        return new RabbitTemplate(connectionFactory);
+    }
+}
+======== C:\Users\seeni\OneDrive\Documents\warning_system\warning_system\src\main\java\com\example\warning_system\config\SecurityConfig.java ======== 
+package com.example.warning_system.config;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
+import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+
+@Configuration
+public class SecurityConfig {
+
+    private final JwtRequestFilter jwtRequestFilter;
+
+    public SecurityConfig(JwtRequestFilter jwtRequestFilter) {
+        this.jwtRequestFilter = jwtRequestFilter;
+    }
+
+    @Autowired
+    public JwtAuthenticationEntryPoint jwtAuthenticationEntryPoint;
+    @Bean
+    public PasswordEncoder passwordEncoder() {
+        return new BCryptPasswordEncoder();
+    }
+
+    @Bean
+    public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+        http.cors().and()
+                .csrf(csrf -> csrf.disable())
+                .authorizeHttpRequests(auth -> auth
+                        .requestMatchers(
+                                "/api/auth/**",
+                                "/swagger-ui.html",
+                                "/swagger-ui/**",
+                                "/v3/api-docs/**",
+                                "/swagger-resources/**",
+                                "/webjars/**",
+                                "/api/notify/**",
+                                "/api/weather/**",
+                                "/api/alerts/**",
+                                "/api/ai/**"
+                        ).permitAll()
+                        .anyRequest().authenticated()
+                )
+                .exceptionHandling(ex -> ex.authenticationEntryPoint(jwtAuthenticationEntryPoint))
+                .sessionManagement(sess -> sess.sessionCreationPolicy(SessionCreationPolicy.STATELESS));
+
+        http.addFilterBefore(jwtRequestFilter, UsernamePasswordAuthenticationFilter.class);
+
+
+        return http.build();
+    }
+
+    @Bean
+    public AuthenticationManager authenticationManager(AuthenticationConfiguration config) throws Exception {
+        return config.getAuthenticationManager();
+    }
+}
+======== C:\Users\seeni\OneDrive\Documents\warning_system\warning_system\src\main\java\com\example\warning_system\config\SwaggerConfig.java ======== 
+package com.example.warning_system.config;
+
+import io.swagger.v3.oas.models.OpenAPI;
+import io.swagger.v3.oas.models.info.Info;
+import io.swagger.v3.oas.models.security.SecurityRequirement;
+import io.swagger.v3.oas.models.security.SecurityScheme;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+
+@Configuration
+public class SwaggerConfig {
+
+    @Bean
+    public OpenAPI customOpenAPI() {
+        final String securitySchemeName = "bearerAuth";
+
+        return new OpenAPI()
+                .info(new Info().title("Disaster Warning System API").version("1.0"))
+                .addSecurityItem(new SecurityRequirement().addList(securitySchemeName))
+                .components(
+                        new io.swagger.v3.oas.models.Components()
+                                .addSecuritySchemes(securitySchemeName,
+                                        new SecurityScheme()
+                                                .name(securitySchemeName)
+                                                .type(SecurityScheme.Type.HTTP)
+                                                .scheme("bearer")
+                                                .bearerFormat("JWT")
+                                )
+                );
+    }
+}
+======== C:\Users\seeni\OneDrive\Documents\warning_system\warning_system\src\main\java\com\example\warning_system\config\WebConfig.java ======== 
+package com.example.warning_system.config;
+
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.web.servlet.config.annotation.CorsRegistry;
+import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
+
+@Configuration
+public class WebConfig {
+
+    @Bean
+    public WebMvcConfigurer corsConfigurer() {
+        return new WebMvcConfigurer() {
+            @Override
+            public void addCorsMappings(CorsRegistry registry) {
+                registry.addMapping("/**") // allow all endpoints
+                        .allowedOrigins("http://localhost:3000") // your React app
+                        .allowedMethods("GET", "POST", "PUT", "DELETE", "OPTIONS")
+                        .allowedHeaders("*")
+                        .allowCredentials(true);
+            }
+        };
+    }
+}
+======== C:\Users\seeni\OneDrive\Documents\warning_system\warning_system\src\main\java\com\example\warning_system\config\WebSocketConfig.java ======== 
+package com.example.warning_system.config;
+
+import org.springframework.context.annotation.Configuration;
+import org.springframework.messaging.simp.config.MessageBrokerRegistry;
+import org.springframework.web.socket.config.annotation.*;
+
+@Configuration
+@EnableWebSocketMessageBroker
+public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
+    @Override
+    public void configureMessageBroker(MessageBrokerRegistry config) {
+        config.enableSimpleBroker("/topic"); // you can replace with full STOMP broker later
+        config.setApplicationDestinationPrefixes("/app");
+    }
+
+    @Override
+    public void registerStompEndpoints(StompEndpointRegistry registry) {
+        registry.addEndpoint("/ws").setAllowedOriginPatterns("*").withSockJS();
+    }
+}
+
+======== C:\Users\seeni\OneDrive\Documents\warning_system\warning_system\src\main\java\com\example\warning_system\controller\AIController.java ======== 
+package com.example.warning_system.controller;
+
+import com.example.warning_system.service.AIService;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+import java.util.Map;
+
+@RestController
+@RequestMapping("/api/ai")
+@CrossOrigin(origins = "http://localhost:3000")
+public class AIController {
+
+    @Autowired
+    private AIService aiService;
+
+    @PostMapping("/predict/flood")
+    public ResponseEntity<?> flood(@RequestBody Map<String,Object> body) {
+        return ResponseEntity.ok(aiService.predictFlood(body));
+    }
+
+    @PostMapping("/predict/fire")
+    public ResponseEntity<?> fire(@RequestBody Map<String,Object> body) {
+        return ResponseEntity.ok(aiService.predictFire(body));
+    }
+
+    @PostMapping("/predict/social")
+    public ResponseEntity<?> social(@RequestBody Map<String,Object> body) {
+        return ResponseEntity.ok(aiService.predictSocial(body));
+    }
+
+    @PostMapping("/predict/storm")
+    public ResponseEntity<?> storm(@RequestBody Map<String,Object> body) {
+        return ResponseEntity.ok(aiService.predictStorm(body));
+    }
+
+    @PostMapping("/predict/earthquake")
+    public ResponseEntity<?> earthquake(@RequestBody Map<String,Object> body) {
+        return ResponseEntity.ok(aiService.predictEarthquake(body));
+    }
+
+    @PostMapping("/predict/risk")
+    public ResponseEntity<?> risk(@RequestBody Map<String,Object> body) {
+        return ResponseEntity.ok(aiService.predictRisk(body));
+    }
+}
+======== C:\Users\seeni\OneDrive\Documents\warning_system\warning_system\src\main\java\com\example\warning_system\controller\AlertController.java ======== 
+package com.example.warning_system.controller;
+
+import com.example.warning_system.dto.AlertRequestDTO;
+import com.example.warning_system.dto.AlertResponseDTO;
+import com.example.warning_system.model.Alert;
+import com.example.warning_system.model.HistoricalPrediction;
+import com.example.warning_system.repository.AlertRepository;
+import com.example.warning_system.repository.HistoricalPredictionRepository;
+import com.example.warning_system.service.NotificationService;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import jakarta.validation.Valid;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.core.io.Resource;
+import org.springframework.core.io.ResourceLoader;
+import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.http.*;
+import org.springframework.web.bind.annotation.*;
+import org.springframework.web.client.RestTemplate;
+
+import java.io.InputStream;
+import java.io.Reader;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
+import org.apache.commons.csv.CSVFormat;
+import org.apache.commons.csv.CSVRecord;
+import java.io.InputStreamReader;
+import java.io.InputStream;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+
+@RestController
+@RequestMapping("/api/alerts")
+@CrossOrigin(origins = "http://localhost:3000")
+public class AlertController {
+
+    private static final Logger logger = LoggerFactory.getLogger(AlertController.class);
+
+    @Autowired
+    private HistoricalPredictionRepository historicalPredictionRepository;
+
+    @Autowired
+    private AlertRepository alertRepository;
+    @Autowired
+    private ResourceLoader resourceLoader;
+
+    @Autowired
+    private RestTemplate restTemplate;
+
+    @Autowired
+    private NotificationService notificationService;
+
+    /**
+     * Get all alerts (DTO - hides internal fields)
+     */
+    @GetMapping("/")
+    public ResponseEntity<List<AlertResponseDTO>> getAllAlerts() {
+        List<Alert> alerts = alertRepository.findAll();
+        List<AlertResponseDTO> dtos = alerts.stream()
+                .map(AlertResponseDTO::fromEntity)
+                .collect(Collectors.toList());
+        return ResponseEntity.ok(dtos);
+    }
+
+    /**
+     * Add a new alert (Validated DTO), triggers notification
+     */
+    @PostMapping("/add")
+    public ResponseEntity<AlertResponseDTO> addAlert(@Valid @RequestBody AlertRequestDTO dto) {
+        Alert alert = new Alert();
+        alert.setDisasterType(dto.getDisasterType());
+        alert.setSeverityScore(dto.getSeverityScore());
+        alert.setLocation(dto.getLocation());
+        alert.setDescription(dto.getDescription());
+        alert.setLatitude(dto.getLatitude());      // NEW: store latitude
+        alert.setLongitude(dto.getLongitude());    // NEW: store longitude
+        alert.setTimestamp(LocalDateTime.now());
+        alert.setStatus("ACTIVE");
+
+        Alert savedAlert = alertRepository.save(alert);
+
+        // Notify users (future: send to real user list/contacts)
+        try {
+            notificationService.sendSMS("+911234567890", "New Disaster Alert: " + alert.getDisasterType());
+//            notificationService.sendEmail("user@example.com", "Disaster Alert",
+//                    "New Alert: " + alert.getDisasterType());
+            logger.info("Notification sent for alert ID {}", savedAlert.getAlertId());
+        } catch (Exception e) {
+            logger.error("Notification error for alert ID {}: {}", savedAlert.getAlertId(), e.getMessage());
+        }
+
+        return ResponseEntity.status(HttpStatus.CREATED).body(AlertResponseDTO.fromEntity(savedAlert));
+    }
+    @GetMapping("/historical-predictions")
+    public ResponseEntity<?> getHistoricalPredictions() {
+        try {
+            Resource resource = resourceLoader.getResource("classpath:DISASTERS/public_emdat_project.csv");
+            InputStream inputStream = resource.getInputStream();
+            Reader reader = new InputStreamReader(inputStream);
+
+            Iterable<CSVRecord> records = CSVFormat.DEFAULT
+                    .withFirstRecordAsHeader()
+                    .parse(reader);
+
+            List<Map<String, String>> result = new ArrayList<>();
+
+            for (CSVRecord record : records) {
+                Map<String, String> row = new HashMap<>();
+                for (String header : record.toMap().keySet()) {
+                    row.put(header, record.get(header));
+                }
+                result.add(row);
+            }
+
+            return ResponseEntity.ok(result);
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("error", "Failed to load dataset: " + e.getMessage()));
+        }
+    }
+
+
+
+
+
+
+
+    /**
+     * Predict using external AI microservice, save prediction as alert
+     */
+    @PostMapping("/predict-ai")
+    public ResponseEntity<?> predictAI(@RequestBody Map<String, Object> inputData) {
+        try {
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_JSON);
+
+            HttpEntity<Map<String, Object>> request = new HttpEntity<>(inputData, headers);
+
+            Map<String, Object> prediction = restTemplate.postForObject(
+                    "http://localhost:5001/predict", request, Map.class
+            );
+
+            // Build Alert entity
+            Alert alert = new Alert();
+            alert.setSeverityScore(convertDouble(prediction.get("severity"), 0.0));
+            alert.setConfidence(convertDouble(prediction.get("confidence"), null));
+            alert.setDisasterType(toString(prediction.get("disaster_type"), "Unknown"));
+            alert.setLocation(toString(prediction.get("location"), "Unknown"));
+            alert.setDescription("Predicted by AI");
+            alert.setLatitude(inputData.get("latitude") != null ? convertDouble(inputData.get("latitude"), null) : null);
+            alert.setLongitude(inputData.get("longitude") != null ? convertDouble(inputData.get("longitude"), null) : null);
+            alert.setTimestamp(LocalDateTime.now());
+            alert.setStatus("ACTIVE");
+
+            Alert savedAlert = alertRepository.save(alert);
+
+            // Save historical prediction
+            HistoricalPrediction hist = new HistoricalPrediction();
+            hist.setLocation(alert.getLocation());
+
+            // Use prediction date from inputData or current date if missing
+            Object dateObj = inputData.get("date");
+            if (dateObj != null) {
+                hist.setPredictionDate(LocalDate.parse(dateObj.toString()));
+            } else {
+                hist.setPredictionDate(LocalDate.now());
+            }
+
+            // Convert maps to JSON strings using Jackson
+            ObjectMapper objectMapper = new ObjectMapper();
+            hist.setPredictionJson(objectMapper.writeValueAsString(prediction));
+            hist.setInputDataJson(objectMapper.writeValueAsString(inputData));
+
+            historicalPredictionRepository.save(hist);
+
+            return ResponseEntity.status(HttpStatus.CREATED)
+                    .body(AlertResponseDTO.fromEntity(savedAlert));
+
+        } catch (Exception e) {
+            logger.error("AI prediction error: ", e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("error", "Prediction failed: " + e.getMessage()));
+        }
+    }
+
+    // Helper methods
+    private Double convertDouble(Object value, Double defaultVal) {
+        try {
+            return value != null ? Double.valueOf(value.toString()) : defaultVal;
+        } catch (Exception e) {
+            return defaultVal;
+        }
+    }
+
+    private String toString(Object val, String defaultVal) {
+        return val != null ? val.toString() : defaultVal;
+    }
+
+}
+======== C:\Users\seeni\OneDrive\Documents\warning_system\warning_system\src\main\java\com\example\warning_system\controller\AuthController.java ======== 
+package com.example.warning_system.controller;
+
+import com.example.warning_system.dto.UserSignupDTO;
+import com.example.warning_system.model.User;
+import com.example.warning_system.repository.UserRepository;
+import com.example.warning_system.service.JwtUtil;
+import jakarta.validation.Valid;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.web.bind.annotation.*;
+import org.springframework.http.ResponseEntity;
+import java.util.Collections;
+import java.util.Map;
+
+@RestController
+@RequestMapping("/api/auth")
+@CrossOrigin(origins = "http://localhost:3000")
+public class AuthController {
+
+    @Autowired
+    private UserRepository userRepository;
+
+    @Autowired
+    private PasswordEncoder passwordEncoder;
+
+    @Autowired
+    private JwtUtil jwtUtil;
+
+    @PostMapping("/signup")
+    public ResponseEntity<?> signup(@Valid @RequestBody UserSignupDTO dto) {
+        if (userRepository.findByEmail(dto.getEmail()).isPresent()) {
+            return ResponseEntity.badRequest().body(Map.of("error", "Email already exists"));
+        }
+        User user = new User();
+        user.setName(dto.getName());
+        user.setEmail(dto.getEmail());
+        user.setPhone(dto.getPhone());
+        user.setPasswordHash(passwordEncoder.encode(dto.getPassword()));  // encode raw password
+        user.setRole("USER");
+        userRepository.save(user);
+        return ResponseEntity.ok("User registered successfully");
+    }
+
+    @PreAuthorize("hasRole('ADMIN')")
+    @PostMapping("/admin/create")
+    public ResponseEntity<?> createAdmin(@Valid @RequestBody UserSignupDTO dto) {
+        if (userRepository.findByEmail(dto.getEmail()).isPresent()) {
+            return ResponseEntity.badRequest().body(Map.of("error", "Email already exists"));
+        }
+
+        User user = new User();
+        user.setName(dto.getName());
+        user.setEmail(dto.getEmail());
+        user.setPhone(dto.getPhone());
+        user.setPasswordHash(passwordEncoder.encode(dto.getPassword()));
+        user.setRole("ADMIN");
+
+        userRepository.save(user);
+        return ResponseEntity.ok("Admin user created successfully");
+    }
+
+
+    @PostMapping("/login")
+    public ResponseEntity<?> login(@RequestBody Map<String,String> loginData) throws Exception {
+        User user = userRepository.findByEmail(loginData.get("email"))
+                .orElseThrow(() -> new Exception("User not found"));
+        if(!passwordEncoder.matches(loginData.get("password"), user.getPasswordHash())){
+            throw new Exception("Invalid credentials");
+        }
+        final String token = jwtUtil.generateToken(user);
+        return ResponseEntity.ok(Collections.singletonMap("token", token));
+    }
+}
+======== C:\Users\seeni\OneDrive\Documents\warning_system\warning_system\src\main\java\com\example\warning_system\controller\IncidentController.java ======== 
+package com.example.warning_system.controller;
+
+import com.example.warning_system.model.Alert;
+import com.example.warning_system.model.Incident;
+import com.example.warning_system.model.User;
+import com.example.warning_system.repository.AlertRepository;
+import com.example.warning_system.repository.IncidentRepository;
+import com.example.warning_system.repository.UserRepository;
+import com.example.warning_system.service.NotificationService;
+import com.example.warning_system.service.TwilioService;
+import jakarta.transaction.Transactional;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.web.bind.annotation.*;
+
+import java.time.LocalDateTime;
+import java.util.List;
+
+@RestController
+@RequestMapping("/api/incidents")
+@CrossOrigin(origins = "http://localhost:3000")
+public class IncidentController {
+
+    private static final Logger logger = LoggerFactory.getLogger(IncidentController.class);
+
+    @Autowired
+    private TwilioService twilioService;
+
+    @Autowired
+    private UserRepository userRepository;
+
+    @Autowired
+    private IncidentRepository incidentRepository;
+
+    @Autowired
+    private AlertRepository alertRepository;
+
+    @Autowired
+    private NotificationService notificationService;
+
+    // Report a new incident
+    @PostMapping("/report")
+    @PreAuthorize("hasAnyRole('USER','ADMIN')")
+    public ResponseEntity<?> reportIncident(@RequestBody Incident incident) {
+        try {
+            Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+            String email = auth.getName();
+            User user = userRepository.findByEmail(email)
+                    .orElseThrow(() -> new RuntimeException("User not found"));
+
+            incident.setUserId(user.getUserId());
+            incident.setTimestamp(LocalDateTime.now());
+            incident.setStatus("PENDING");
+            if (incident.getSeverity() == null) {
+                incident.setSeverity(0.0);
+            }
+            // Accept latitude & longitude if provided, else null
+            if (incident.getLatitude() == null || incident.getLongitude() == null) {
+                incident.setLatitude(null);
+                incident.setLongitude(null);
+            }
+
+            Incident saved = incidentRepository.save(incident);
+
+//            try {
+//                String normalizedPhone = normalizePhoneNumber(user.getPhone());
+//
+//                String emailBody = String.format(
+//                        "Hello %s,\n\nThank you for reporting a new incident:\nType: %s\nLocation: %s\nSeverity: %.2f\n\nOur team will review and update you accordingly.",
+//                        user.getName(),
+//                        incident.getDisasterType(),
+//                        incident.getLocation(),
+//                        incident.getSeverity()
+//                );
+////                notificationService.sendEmail(user.getEmail(), "Incident Report Submitted", emailBody);
+//
+////                String whatsappMsg = String.format(
+////                        "Hi %s, your incident report has been received.\nType: %s\nLocation: %s\nSeverity: %.2f",
+////                        user.getName(),
+////                        incident.getDisasterType(),
+////                        incident.getLocation(),
+////                        incident.getSeverity()
+////                );
+////                twilioService.sendWhatsAppMessage(normalizedPhone, whatsappMsg);
+//
+//            } catch (Exception ex) {
+//                logger.error("Notification failure for reportIncident: {}", ex.getMessage());
+//            }
+
+            return ResponseEntity.ok(saved);
+
+        } catch (Exception e) {
+            logger.error("Failed to report incident: {}", e.getMessage());
+            return ResponseEntity.badRequest().body("Failed to report incident: " + e.getMessage());
+        }
+    }
+
+    // Get pending incidents (admin only)
+    @GetMapping("/pending")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<List<Incident>> getPendingIncidents() {
+        List<Incident> pending = incidentRepository.findByStatus("PENDING");
+        return ResponseEntity.ok(pending);
+    }
+
+    // Approve incident (admin only)
+    @Transactional
+    @PostMapping("/{id}/approve")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<?> approveIncident(@PathVariable Long id) {
+        return incidentRepository.findById(id)
+                .map(incident -> {
+                    if ("APPROVED".equalsIgnoreCase(incident.getStatus())) {
+                        return ResponseEntity.badRequest().body("Incident already approved.");
+                    }
+
+                    // Approve incident
+                    incident.setStatus("APPROVED");
+                    incidentRepository.save(incident);
+
+                    // Find existing alerts for same disaster type and location
+                    List<Alert> alerts = alertRepository
+                            .findByDisasterTypeAndLocation(incident.getDisasterType(), incident.getLocation());
+
+                    Alert alert;
+                    if (!alerts.isEmpty()) {
+                        alert = alerts.get(0); // update the first alert
+                        if (alerts.size() > 1) {
+                            // Optional: log duplicate alerts for review
+                            logger.warn("Multiple alerts found for {} at {}. Only the first is updated.",
+                                    incident.getDisasterType(), incident.getLocation());
+                        }
+                    } else {
+                        alert = new Alert();
+                    }
+
+                    // Set/update alert fields
+                    alert.setDisasterType(incident.getDisasterType());
+                    alert.setDescription(incident.getDescription());
+                    alert.setLocation(incident.getLocation());
+                    alert.setSeverityScore(incident.getSeverity());
+                    alert.setTimestamp(LocalDateTime.now());
+                    alert.setStatus("ACTIVE");
+                    alert.setLatitude(incident.getLatitude());
+                    alert.setLongitude(incident.getLongitude());
+
+                    Alert savedAlert = alertRepository.save(alert);
+
+                    // Send notifications safely
+                    try {
+                        User reporter = userRepository.findById(incident.getUserId())
+                                .orElseThrow(() -> new RuntimeException("User not found"));
+                        String normalizedPhone = normalizePhoneNumber(reporter.getPhone());
+                        String msg = String.format(
+                                "Hi %s, your incident has been approved.\nType: %s\nLocation: %s\nSeverity: %.2f",
+                                reporter.getName(),
+                                incident.getDisasterType(),
+                                incident.getLocation(),
+                                incident.getSeverity()
+                        );
+                        notificationService.sendSMS(normalizedPhone, msg);
+                        twilioService.sendWhatsAppMessage(normalizedPhone, msg);
+                    } catch (Exception e) {
+                        logger.error("Notification failure for approveIncident: {}", e.getMessage());
+                    }
+
+                    return ResponseEntity.ok(savedAlert);
+                })
+                .orElseGet(() -> ResponseEntity.badRequest().body("Incident not found."));
+    }
+
+
+    // Reject incident (admin only)
+    @Transactional
+    @PostMapping("/{id}/reject")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<?> rejectIncident(@PathVariable Long id) {
+        return incidentRepository.findById(id)
+                .map(incident -> {
+                    if ("REJECTED".equalsIgnoreCase(incident.getStatus())) {
+                        return ResponseEntity.badRequest().body("Incident already rejected.");
+                    }
+                    incident.setStatus("REJECTED");
+                    Incident saved = incidentRepository.save(incident);
+                    return ResponseEntity.ok(saved);
+                })
+                .orElseGet(() -> ResponseEntity.badRequest().body("Incident not found."));
+    }
+
+    // Bulk approve incidents (admin only)
+    @Transactional
+    @PostMapping("/bulk-approve")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<?> bulkApprove(@RequestBody List<Long> incidentIds) {
+        List<Alert> alerts = incidentIds.stream()
+                .map(incidentRepository::findById)
+                .filter(java.util.Optional::isPresent)
+                .map(java.util.Optional::get)
+                .filter(inc -> !"APPROVED".equalsIgnoreCase(inc.getStatus()))
+                .map(inc -> {
+                    inc.setStatus("APPROVED");
+                    incidentRepository.save(inc);
+                    Alert alert = createAlertFromIncident(inc);
+
+                    // Notifications could be added here if desired
+
+                    return alertRepository.save(alert);
+                })
+                .toList();
+
+        return ResponseEntity.ok(alerts);
+    }
+
+    private Alert createAlertFromIncident(Incident incident) {
+        Alert alert = new Alert();
+        alert.setDisasterType(incident.getDisasterType());
+        alert.setDescription(incident.getDescription());
+        alert.setLocation(incident.getLocation());
+        alert.setSeverityScore(incident.getSeverity());
+        alert.setTimestamp(LocalDateTime.now());
+        alert.setStatus("ACTIVE");
+        alert.setLatitude(incident.getLatitude());
+        alert.setLongitude(incident.getLongitude());
+        return alert;
+    }
+
+    private String normalizePhoneNumber(String phone) {
+        if (phone == null) return null;
+        phone = phone.trim();
+        if (phone.startsWith("+91")) {
+            return phone;
+        } else if (phone.startsWith("0")) {
+            return "+91" + phone.substring(1);
+        } else if (phone.matches("\\d{10}")) {
+            return "+91" + phone;
+        } else {
+            return phone;
+        }
+    }
+}
+======== C:\Users\seeni\OneDrive\Documents\warning_system\warning_system\src\main\java\com\example\warning_system\controller\NotificationController.java ======== 
+package com.example.warning_system.controller;
+
+import com.example.warning_system.model.User;
+import com.example.warning_system.repository.UserRepository;
+import com.example.warning_system.service.NotificationService;
+import com.example.warning_system.service.TwilioService;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.web.bind.annotation.CrossOrigin;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+@RestController
+@RequestMapping("/api/notify")
+@CrossOrigin(origins = "http://localhost:3000")
+public class NotificationController {
+
+    @Autowired
+    private NotificationService notificationService;
+
+    @Autowired
+    private TwilioService twilioService;
+
+    @Autowired
+    private UserRepository userRepository;
+
+    @GetMapping("/email")
+    public String sendEmail(@AuthenticationPrincipal UserDetails userDetails) {
+        User user = userRepository.findByEmail(userDetails.getUsername())
+                .orElseThrow(() -> new RuntimeException("User not found"));
+
+//        notificationService.sendEmail(user.getEmail(), "Disaster Alert", "Hello " + user.getName() + ", stay safe!");
+        return "Email sent to " + user.getEmail();
+    }
+
+    @GetMapping("/whatsapp")
+    public String sendWhatsApp(@AuthenticationPrincipal UserDetails userDetails) {
+        User user = userRepository.findByEmail(userDetails.getUsername())
+                .orElseThrow(() -> new RuntimeException("User not found"));
+
+        // ✅ Fix: prepend +91 (or your country code)
+        String phone = "whatsapp:+91" + user.getPhone();
+
+        twilioService.sendWhatsAppMessage(phone, "Hello " + user.getName() + "! This is a test WhatsApp message.");
+        return "WhatsApp message sent to " + user.getPhone();
+    }
+}
+======== C:\Users\seeni\OneDrive\Documents\warning_system\warning_system\src\main\java\com\example\warning_system\controller\UserController.java ======== 
+package com.example.warning_system.controller;
+
+import com.example.warning_system.model.User;
+import com.example.warning_system.repository.UserRepository;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.web.bind.annotation.*;
+import java.util.List;
+import java.util.Optional;
+
+@RestController
+@RequestMapping("/api/users")
+@CrossOrigin(origins = "http://localhost:3000")
+public class UserController {
+
+    @Autowired
+    private UserRepository userRepository;
+
+    // Get all users (admin only)
+    @GetMapping("/")
+    public List<User> getAllUsers() {
+        return userRepository.findAll();
+    }
+
+    // Get user by ID
+    @GetMapping("/{id}")
+    public Optional<User> getUserById(@PathVariable Long id) {
+        return userRepository.findById(id);
+    }
+
+    // Update user info
+    @PutMapping("/{id}")
+    public User updateUser(@PathVariable Long id, @RequestBody User updatedUser) {
+        return userRepository.findById(id).map(user -> {
+            user.setName(updatedUser.getName());
+            user.setEmail(updatedUser.getEmail());
+            user.setPhone(updatedUser.getPhone());
+            // Do not update password here for simplicity
+            return userRepository.save(user);
+        }).orElseThrow(() -> new RuntimeException("User not found"));
+    }
+
+    // Delete user (admin only)
+    @DeleteMapping("/{id}")
+    public String deleteUser(@PathVariable Long id) {
+        userRepository.deleteById(id);
+        return "User deleted successfully";
+    }
+}
+======== C:\Users\seeni\OneDrive\Documents\warning_system\warning_system\src\main\java\com\example\warning_system\controller\WeatherController.java ======== 
+package com.example.warning_system.controller;
+
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.MediaType;
+import org.springframework.web.bind.annotation.*;
+import org.springframework.web.client.RestTemplate;
+
+@RestController
+@RequestMapping("/api/weather")
+@CrossOrigin(origins = "http://localhost:3000")
+public class WeatherController {
+
+    private final RestTemplate restTemplate = new RestTemplate();
+    private final ObjectMapper mapper = new ObjectMapper();
+
+    @Value("${openweather.apikey}")
+    private String apiKey;
+
+    @GetMapping(value = "/current/{city}", produces = MediaType.APPLICATION_JSON_VALUE)
+    public String getCurrentWeather(@PathVariable("city") String city) {
+        try {
+            String url = String.format(
+                    "https://api.openweathermap.org/data/2.5/weather?q=%s&appid=%s&units=metric",
+                    city, apiKey);
+
+            System.out.println("👉 Fetching weather from: " + url);
+
+            String response = restTemplate.getForObject(url, String.class);
+            System.out.println("👉 API Response: " + response);
+
+            JsonNode root = mapper.readTree(response);
+
+            JsonNode mainNode = root.path("main");
+            JsonNode windNode = root.path("wind");
+            JsonNode rainNode = root.path("rain");
+
+            ObjectNode simplified = mapper.createObjectNode();
+            simplified.put("city", city);
+            simplified.put("temperature", mainNode.path("temp").asDouble());
+            simplified.put("humidity", mainNode.path("humidity").asInt());
+            simplified.put("windSpeed", windNode.path("speed").asDouble());
+            simplified.put("rainfall1h", rainNode.path("1h").asDouble(0.0));
+            simplified.put("timestamp", java.time.Instant.now().toString());
+
+            return simplified.toString();
+
+        } catch (Exception e) {
+            e.printStackTrace(); // 🔥 print the real error
+            return "{\"error\": \"Failed to fetch weather data\"}";
+        }
+    }
+}
+======== C:\Users\seeni\OneDrive\Documents\warning_system\warning_system\src\main\java\com\example\warning_system\dto\AlertDTO.java ======== 
+package com.example.warning_system.dto;
+
+
+import com.example.warning_system.model.Alert;
+
+public class AlertDTO {
+    public Long id; public String disasterType; public double severity; public double confidence;
+    public double lat; public double lng; public String timestamp;
+    public AlertDTO(Alert a) { /* map fields */ }
+}
+======== C:\Users\seeni\OneDrive\Documents\warning_system\warning_system\src\main\java\com\example\warning_system\dto\AlertRequestDTO.java ======== 
+// src/main/java/com/example/warning_system/dto/AlertRequestDTO.java
+package com.example.warning_system.dto;
+
+import jakarta.validation.constraints.*;
+
+public class AlertRequestDTO {
+    @NotBlank
+    private String disasterType;
+    @NotNull
+    @DecimalMin("0")
+    @DecimalMax("10")
+    private Double severityScore;
+    @NotBlank
+    private String location;
+    private String description;
+    private Double latitude;
+    private Double longitude;
+
+    public Double getLatitude() {
+        return latitude;
+    }
+
+    public void setLatitude(Double latitude) {
+        this.latitude = latitude;
+    }
+
+    public Double getLongitude() {
+        return longitude;
+    }
+
+    public void setLongitude(Double longitude) {
+        this.longitude = longitude;
+    }
+
+    public String getDisasterType() {
+        return disasterType;
+    }
+
+    public void setDisasterType(String disasterType) {
+        this.disasterType = disasterType;
+    }
+
+    public Double getSeverityScore() {
+        return severityScore;
+    }
+
+    public void setSeverityScore(Double severityScore) {
+        this.severityScore = severityScore;
+    }
+
+    public String getLocation() {
+        return location;
+    }
+
+    public void setLocation(String location) {
+        this.location = location;
+    }
+
+    public String getDescription() {
+        return description;
+    }
+
+    public void setDescription(String description) {
+        this.description = description;
+    }
+// latitude and longitude as needed
+    // getters/setters
+}
+======== C:\Users\seeni\OneDrive\Documents\warning_system\warning_system\src\main\java\com\example\warning_system\dto\AlertResponseDTO.java ======== 
+// src/main/java/com/example/warning_system/dto/AlertResponseDTO.java
+package com.example.warning_system.dto;
+import com.example.warning_system.model.Alert;
+import java.time.LocalDateTime;
+
+public class AlertResponseDTO {
+    private Long alertId;
+    private String disasterType;
+    private Double severityScore;
+    private String location;
+    private String description;
+    private LocalDateTime timestamp;
+    private String status;
+    private Double confidence;
+    private Double latitude;
+    private Double longitude;
+
+    public Double getLatitude() {
+        return latitude;
+    }
+
+    public void setLatitude(Double latitude) {
+        this.latitude = latitude;
+    }
+
+    public Double getLongitude() {
+        return longitude;
+    }
+
+    public void setLongitude(Double longitude) {
+        this.longitude = longitude;
+    }
+
+    public static AlertResponseDTO fromEntity(Alert a) {
+        AlertResponseDTO dto = new AlertResponseDTO();
+        dto.alertId = a.getAlertId();
+        dto.disasterType = a.getDisasterType();
+        dto.severityScore = a.getSeverityScore();
+        dto.location = a.getLocation();
+        dto.description = a.getDescription();
+        dto.timestamp = a.getTimestamp();
+        dto.status = a.getStatus();
+        dto.confidence = a.getConfidence();
+        dto.latitude=a.getLatitude();
+        dto.longitude=a.getLongitude();
+        return dto;
+    }
+    // Getters and Setters
+
+    public Long getAlertId() {
+        return alertId;
+    }
+
+    public void setAlertId(Long alertId) {
+        this.alertId = alertId;
+    }
+
+    public String getDisasterType() {
+        return disasterType;
+    }
+
+    public void setDisasterType(String disasterType) {
+        this.disasterType = disasterType;
+    }
+
+    public Double getSeverityScore() {
+        return severityScore;
+    }
+
+    public void setSeverityScore(Double severityScore) {
+        this.severityScore = severityScore;
+    }
+
+    public String getLocation() {
+        return location;
+    }
+
+    public void setLocation(String location) {
+        this.location = location;
+    }
+
+    public String getDescription() {
+        return description;
+    }
+
+    public void setDescription(String description) {
+        this.description = description;
+    }
+
+    public LocalDateTime getTimestamp() {
+        return timestamp;
+    }
+
+    public void setTimestamp(LocalDateTime timestamp) {
+        this.timestamp = timestamp;
+    }
+
+    public String getStatus() {
+        return status;
+    }
+
+    public void setStatus(String status) {
+        this.status = status;
+    }
+
+    public Double getConfidence() {
+        return confidence;
+    }
+
+    public void setConfidence(Double confidence) {
+        this.confidence = confidence;
+    }
+}
+======== C:\Users\seeni\OneDrive\Documents\warning_system\warning_system\src\main\java\com\example\warning_system\dto\UserSignupDTO.java ======== 
+// src/main/java/com/example/warning_system/dto/UserSignupDTO.java
+package com.example.warning_system.dto;
+
+import jakarta.validation.constraints.*;
+
+public class UserSignupDTO {
+    @NotBlank
+    private String name;
+    @Email
+    @NotBlank
+    private String email;
+    @NotBlank
+    private String phone;
+    @NotBlank
+    @Size(min = 6)
+    private String password;
+
+    public String getName() {
+        return name;
+    }
+
+    public void setName(String name) {
+        this.name = name;
+    }
+
+    public String getEmail() {
+        return email;
+    }
+
+    public void setEmail(String email) {
+        this.email = email;
+    }
+
+    public String getPhone() {
+        return phone;
+    }
+
+    public void setPhone(String phone) {
+        this.phone = phone;
+    }
+
+    public String getPassword() {
+        return password;
+    }
+
+    public void setPassword(String password) {
+        this.password = password;
+    }
+// getters/setters
+}
+======== C:\Users\seeni\OneDrive\Documents\warning_system\warning_system\src\main\java\com\example\warning_system\exception\GlobalExceptionHandler.java ======== 
+// src/main/java/com/example/warning_system/exception/GlobalExceptionHandler.java
+package com.example.warning_system.exception;
+
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.annotation.ControllerAdvice;
+import org.springframework.web.bind.annotation.ExceptionHandler;
+
+import java.util.HashMap;
+import java.util.Map;
+
+@ControllerAdvice
+public class GlobalExceptionHandler {
+    @ExceptionHandler(MethodArgumentNotValidException.class)
+    public ResponseEntity<Object> handleValidationErrors(MethodArgumentNotValidException ex) {
+        Map<String, String> errors = new HashMap<>();
+        ex.getBindingResult().getFieldErrors().forEach(error ->
+                errors.put(error.getField(), error.getDefaultMessage())
+        );
+        return ResponseEntity.badRequest().body(errors);
+    }
+
+    @ExceptionHandler(Exception.class)
+    public ResponseEntity<Object> handleAll(Exception ex) {
+        Map<String, String> res = new HashMap<>();
+        res.put("error", ex.getMessage());
+        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(res);
+    }
+}
+======== C:\Users\seeni\OneDrive\Documents\warning_system\warning_system\src\main\java\com\example\warning_system\model\Alert.java ======== 
+package com.example.warning_system.model;
+
+import jakarta.persistence.*;
+import java.time.LocalDateTime;
+import lombok.Data;
+
+@Data
+@Entity
+@Table(name = "alerts")
+public class Alert {
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long alertId;
+    private String disasterType;
+    private Double severityScore;
+    private String location;
+    private String description;
+    private LocalDateTime timestamp;
+    private String status; // ACTIVE / RESOLVED
+    private Double confidence; // add getter/setter
+    private Double latitude;
+    private Double longitude;
+
+
+
+}
+======== C:\Users\seeni\OneDrive\Documents\warning_system\warning_system\src\main\java\com\example\warning_system\model\HistoricalPrediction.java ======== 
+package com.example.warning_system.model;
+
+import jakarta.persistence.*;
+import java.time.LocalDate;
+
+@Entity
+public class HistoricalPrediction {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    private String location;
+    private String disasterType; // <-- add this field
+    private Double severityScore; // <-- add this field
+    private Double latitude;
+    private Double longitude;
+    private LocalDate predictionDate;
+
+    @Column(columnDefinition = "TEXT")
+    private String predictionJson;
+
+    @Column(columnDefinition = "TEXT")
+    private String inputDataJson;
+
+    // --- Getters and Setters ---
+    public Long getId() { return id; }
+    public void setId(Long id) { this.id = id; }
+
+    public String getLocation() { return location; }
+    public void setLocation(String location) { this.location = location; }
+
+    public String getDisasterType() { return disasterType; }
+    public void setDisasterType(String disasterType) { this.disasterType = disasterType; }
+
+    public Double getSeverityScore() { return severityScore; }
+    public void setSeverityScore(Double severityScore) { this.severityScore = severityScore; }
+
+    public Double getLatitude() { return latitude; }
+    public void setLatitude(Double latitude) { this.latitude = latitude; }
+
+    public Double getLongitude() { return longitude; }
+    public void setLongitude(Double longitude) { this.longitude = longitude; }
+
+    public LocalDate getPredictionDate() { return predictionDate; }
+    public void setPredictionDate(LocalDate predictionDate) { this.predictionDate = predictionDate; }
+
+    public String getPredictionJson() { return predictionJson; }
+    public void setPredictionJson(String predictionJson) { this.predictionJson = predictionJson; }
+
+    public String getInputDataJson() { return inputDataJson; }
+    public void setInputDataJson(String inputDataJson) { this.inputDataJson = inputDataJson; }
+}
+======== C:\Users\seeni\OneDrive\Documents\warning_system\warning_system\src\main\java\com\example\warning_system\model\Incident.java ======== 
+package com.example.warning_system.model;
+
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import jakarta.persistence.*;
+import lombok.Data;
+import java.time.LocalDateTime;
+
+@Data
+@Entity
+@JsonIgnoreProperties(ignoreUnknown = true)
+@Table(name = "incidents")
+public class Incident {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long incidentId;
+
+    private String disasterType;
+    private String description;
+
+    private String location; // human-readable area (e.g., "Delhi")
+    private Double severity; // new field: 0-10 scale
+
+    private LocalDateTime timestamp;
+    private String status; // PENDING, APPROVED, REJECTED
+
+    private Long userId; // who reported
+    private Double latitude;
+    private Double longitude;
+
+}
+======== C:\Users\seeni\OneDrive\Documents\warning_system\warning_system\src\main\java\com\example\warning_system\model\User.java ======== 
+package com.example.warning_system.model;
+
+import jakarta.persistence.*;
+import lombok.Data;
+
+@Data
+@Entity
+@Table(name = "users")
+public class User {
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long userId;
+    private String name;
+    private String email;
+    private String phone;
+    private String passwordHash;
+    private String role; // ADMIN / USER
+}
+
+======== C:\Users\seeni\OneDrive\Documents\warning_system\warning_system\src\main\java\com\example\warning_system\model\WeatherData.java ======== 
+// src/main/java/com/example/warning_system/model/WeatherData.java
+package com.example.warning_system.model;
+
+import jakarta.persistence.*;
+import lombok.Data;
+
+import java.time.LocalDateTime;
+
+@Data
+@Entity
+@Table(name = "weather_data")
+public class WeatherData {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    private String location;    // e.g., city name
+
+    private Double temperature; // in Celsius
+
+    private Double rainfall1h;  // rainfall in last 1 hour (mm)
+
+    private Double windSpeed;   // wind speed in m/s
+
+    private LocalDateTime timestamp;  // time of the observation
+
+}
+======== C:\Users\seeni\OneDrive\Documents\warning_system\warning_system\src\main\java\com\example\warning_system\repository\AlertRepository.java ======== 
+package com.example.warning_system.repository;
+
+import com.example.warning_system.model.Alert;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import java.util.List;
+import java.util.Optional;
+
+public interface AlertRepository extends JpaRepository<Alert, Long> {
+
+    @Query("SELECT a.disasterType, COUNT(a) FROM Alert a GROUP BY a.disasterType")
+    List<Object[]> countAlertsByDisasterType();
+
+    @Query("SELECT a.disasterType, AVG(a.severityScore) FROM Alert a GROUP BY a.disasterType")
+    List<Object[]> avgSeverityByDisasterType();
+    List<Alert> findByDisasterTypeAndLocation(String disasterType, String location);
+}
+======== C:\Users\seeni\OneDrive\Documents\warning_system\warning_system\src\main\java\com\example\warning_system\repository\HistoricalPredictionRepository.java ======== 
+package com.example.warning_system.repository;
+
+import com.example.warning_system.model.HistoricalPrediction;
+import org.springframework.data.jpa.repository.JpaRepository;
+import java.time.LocalDate;
+import java.util.List;
+
+public interface HistoricalPredictionRepository extends JpaRepository<HistoricalPrediction, Long> {
+    List<HistoricalPrediction> findByLocationAndPredictionDate(String location, LocalDate predictionDate);
+}
+======== C:\Users\seeni\OneDrive\Documents\warning_system\warning_system\src\main\java\com\example\warning_system\repository\IncidentRepository.java ======== 
+package com.example.warning_system.repository;
+
+import com.example.warning_system.model.Incident;
+import org.springframework.data.jpa.repository.JpaRepository;
+import java.util.List;
+
+public interface IncidentRepository extends JpaRepository<Incident, Long> {
+    List<Incident> findByUserId(Long userId);
+    List<Incident> findByStatus(String status);
+    List<Incident> findByDisasterType(String disasterType);
+    List<Incident> findBySeverityBetween(Double min, Double max);
+}
+======== C:\Users\seeni\OneDrive\Documents\warning_system\warning_system\src\main\java\com\example\warning_system\repository\UserRepository.java ======== 
+package com.example.warning_system.repository;
+
+import com.example.warning_system.model.User;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.stereotype.Repository;
+import java.util.Optional;
+
+@Repository
+public interface UserRepository extends JpaRepository<User, Long> {
+    Optional<User> findByEmail(String email);
+}======== C:\Users\seeni\OneDrive\Documents\warning_system\warning_system\src\main\java\com\example\warning_system\service\AIService.java ======== 
+package com.example.warning_system.service;
+
+import org.springframework.stereotype.Service;
+import org.springframework.web.client.RestTemplate;
+import org.springframework.http.*;
+import java.util.Map;
+import java.util.HashMap;
+
+@Service
+public class AIService {
+    private final RestTemplate rest = new RestTemplate();
+    private final String AI_BASE = "http://localhost:5001";
+
+    private Map<String,Object> postToAI(String path, Map<String,Object> payload) {
+        String url = AI_BASE + path;
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        HttpEntity<Map<String,Object>> req = new HttpEntity<>(payload, headers);
+        ResponseEntity<Map> resp = rest.postForEntity(url, req, Map.class);
+        return (Map<String,Object>) resp.getBody();
+    }
+
+    public Map<String,Object> predictFlood(Map<String,Object> payload) {
+        return postToAI("/predict/flood", payload);
+    }
+
+    public Map<String,Object> predictFire(Map<String,Object> payload) {
+        return postToAI("/predict/fire", payload);
+    }
+
+    public Map<String,Object> predictSocial(Map<String,Object> payload) {
+        return postToAI("/predict/social", payload);
+    }
+
+    public Map<String,Object> predictStorm(Map<String,Object> payload) {
+        return postToAI("/predict/storm", payload);
+    }
+
+    public Map<String,Object> predictEarthquake(Map<String,Object> payload) {
+        return postToAI("/predict/earthquake", payload);
+    }
+
+    public Map<String,Object> predictRisk(Map<String,Object> payload) {
+        return postToAI("/predict/risk", payload);
+    }
+}
+======== C:\Users\seeni\OneDrive\Documents\warning_system\warning_system\src\main\java\com\example\warning_system\service\AlertService.java ======== 
+package com.example.warning_system.service;
+import com.example.warning_system.dto.AlertDTO;
+import com.example.warning_system.model.Alert;
+import com.example.warning_system.repository.AlertRepository;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
+import org.springframework.stereotype.Service;
+
+@Service
+public class AlertService {
+    private final AlertRepository alertRepo;
+    private final SimpMessagingTemplate messagingTemplate;
+
+    public AlertService(AlertRepository alertRepo, SimpMessagingTemplate messagingTemplate) {
+        this.alertRepo = alertRepo;
+        this.messagingTemplate = messagingTemplate;
+    }
+
+    public Alert createAlert(Alert alert) {
+        Alert saved = alertRepo.save(alert);
+        // send to websocket subscribers
+        messagingTemplate.convertAndSend("/topic/alerts", new AlertDTO(saved));
+        return saved;
+    }
+}
+
+======== C:\Users\seeni\OneDrive\Documents\warning_system\warning_system\src\main\java\com\example\warning_system\service\CsvHistoricalPredictionService.java ======== 
+package com.example.warning_system.service;
+
+import com.example.warning_system.model.HistoricalPrediction;
+import org.springframework.stereotype.Service;
+
+import java.io.BufferedReader;
+import java.io.FileReader;
+import java.io.IOException;
+import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.List;
+
+@Service
+public class CsvHistoricalPredictionService {
+
+    private static final String CSV_FILE = "C:\\Users\\seeni\\OneDrive\\Documents\\warning_system\\warning_system\\ai_service\\DISASTERS\\processed_disasters.csv";
+
+    public List<HistoricalPrediction> getHistoricalPredictions(String location, LocalDate date) {
+        List<HistoricalPrediction> results = new ArrayList<>();
+
+        try (BufferedReader br = new BufferedReader(new FileReader(CSV_FILE))) {
+            String header = br.readLine(); // skip header
+            String line;
+
+            while ((line = br.readLine()) != null) {
+                try {
+                    String[] parts = line.split(",", -1);
+                    String loc = parts[0];
+                    String disasterType = parts[1];
+                    double severity = Double.parseDouble(parts[2]);
+                    double latitude = Double.parseDouble(parts[3]);
+                    double longitude = Double.parseDouble(parts[4]);
+                    LocalDate predictionDate = LocalDate.parse(parts[5]);
+
+                    if (loc.equalsIgnoreCase(location) && predictionDate.equals(date)) {
+                        HistoricalPrediction hp = new HistoricalPrediction();
+                        hp.setLocation(loc);
+                        hp.setDisasterType(disasterType);
+                        hp.setSeverityScore(severity);
+                        hp.setLatitude(latitude);
+                        hp.setLongitude(longitude);
+                        hp.setPredictionDate(predictionDate);
+                        results.add(hp);
+                    }
+                } catch (Exception e) {
+                    // Skip bad rows
+                    continue;
+                }
+            }
+
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+
+        return results;
+    }
+}
+======== C:\Users\seeni\OneDrive\Documents\warning_system\warning_system\src\main\java\com\example\warning_system\service\FirebaseService.java ======== 
+package com.example.warning_system.service;
+
+import com.google.auth.oauth2.GoogleCredentials;
+import com.google.firebase.FirebaseApp;
+import com.google.firebase.FirebaseOptions;
+import com.google.firebase.messaging.FirebaseMessaging;
+import com.google.firebase.messaging.Message;
+import org.springframework.stereotype.Service;
+
+import javax.annotation.PostConstruct;
+import java.io.FileInputStream;
+import java.io.FileNotFoundException;
+
+@Service
+public class FirebaseService {
+
+    @PostConstruct
+    public void init() {
+        try {
+            // Skip Firebase initialization during tests
+            String testProperty = System.getProperty("spring.test.context.active");
+            if (testProperty != null && testProperty.equals("true")) {
+                System.out.println("Skipping Firebase init during tests");
+                return;
+            }
+
+            FileInputStream serviceAccount = new FileInputStream("firebase-service-account.json");
+            FirebaseOptions options = FirebaseOptions.builder()
+                    .setCredentials(GoogleCredentials.fromStream(serviceAccount))
+                    .build();
+
+            if (FirebaseApp.getApps().isEmpty()) {
+                FirebaseApp.initializeApp(options);
+            }
+        } catch (FileNotFoundException e) {
+            System.out.println("Firebase service account not found, skipping Firebase init.");
+        } catch (Exception e) {
+            throw new RuntimeException("Firebase init failed", e);
+        }
+    }
+
+    public void sendPush(String token, String title, String body) throws Exception {
+        // Skip sending push notifications during tests
+        String testProperty = System.getProperty("spring.test.context.active");
+        if (testProperty != null && testProperty.equals("true")) {
+            System.out.println("Skipping push message sending during tests");
+            return;
+        }
+
+        Message message = Message.builder()
+                .putData("title", title)
+                .putData("body", body)
+                .setToken(token)
+                .build();
+        FirebaseMessaging.getInstance().send(message);
+    }
+}
+======== C:\Users\seeni\OneDrive\Documents\warning_system\warning_system\src\main\java\com\example\warning_system\service\IncidentService.java ======== 
+package com.example.warning_system.service;
+
+import com.example.warning_system.model.Incident;
+import com.example.warning_system.repository.IncidentRepository;
+import org.springframework.stereotype.Service;
+
+import java.time.LocalDateTime;
+import java.util.List;
+
+@Service
+public class IncidentService {
+
+    private final IncidentRepository repo;
+
+    public IncidentService(IncidentRepository repo) {
+        this.repo = repo;
+    }
+
+    public Incident createIncident(Incident inc, Long userId) {
+        inc.setUserId(userId);
+        inc.setStatus("PENDING");
+        inc.setTimestamp(LocalDateTime.now());
+        return repo.save(inc);
+    }
+
+    public List<Incident> getPendingIncidents() {
+        return repo.findByStatus("PENDING");
+    }
+
+    public List<Incident> getByUserId(Long userId) {
+        return repo.findByUserId(userId);
+    }
+
+    public Incident updateStatus(Long id, String status) {
+        Incident inc = repo.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("Incident not found"));
+        inc.setStatus(status);
+        return repo.save(inc);
+    }
+}
+======== C:\Users\seeni\OneDrive\Documents\warning_system\warning_system\src\main\java\com\example\warning_system\service\JwtUserDetailsService.java ======== 
+package com.example.warning_system.service;
+
+import com.example.warning_system.model.User;
+import com.example.warning_system.repository.UserRepository;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.security.core.userdetails.UserDetailsService;
+import org.springframework.security.core.userdetails.UsernameNotFoundException;
+import org.springframework.stereotype.Service;
+
+import java.util.Collections;
+
+@Service
+public class JwtUserDetailsService implements UserDetailsService {
+
+    @Autowired
+    private UserRepository userRepository;
+
+    @Override
+    public UserDetails loadUserByUsername(String email) throws UsernameNotFoundException {
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new UsernameNotFoundException("User not found with email: " + email));
+
+        // Convert your custom User entity into Spring Security's UserDetails
+        return new org.springframework.security.core.userdetails.User(
+                user.getEmail(),
+                user.getPasswordHash(),
+                Collections.emptyList() // You can map roles/authorities here later
+        );
+    }
+}
+======== C:\Users\seeni\OneDrive\Documents\warning_system\warning_system\src\main\java\com\example\warning_system\service\JwtUtil.java ======== 
+package com.example.warning_system.service;
+
+import io.jsonwebtoken.Jwts;
+import io.jsonwebtoken.SignatureAlgorithm;
+import io.jsonwebtoken.security.Keys;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.stereotype.Component;
+
+import javax.crypto.SecretKey;
+import java.util.Date;
+import java.util.HashMap;
+import java.util.Map;
+
+@Component
+public class JwtUtil {
+
+    private final SecretKey key;
+
+    @Value("${jwt.expiration}")
+    private long expiration;
+
+    public JwtUtil(@Value("${jwt.secret}") String secret) {
+        // Convert secret string into a proper SecretKey
+        this.key = Keys.hmacShaKeyFor(secret.getBytes());
+    }
+
+    // Generate token with only username - legacy method
+    public String generateToken(String username) {
+        return Jwts.builder()
+                .setSubject(username)
+                .setIssuedAt(new Date(System.currentTimeMillis()))
+                .setExpiration(new Date(System.currentTimeMillis() + expiration))
+                .signWith(key, SignatureAlgorithm.HS256)
+                .compact();
+    }
+
+    // New method - generate token with username and role claims
+    public String generateToken(com.example.warning_system.model.User user) {
+        Map<String, Object> claims = new HashMap<>();
+        claims.put("role", user.getRole());
+
+        return Jwts.builder()
+                .setClaims(claims)
+                .setSubject(user.getEmail())
+                .setIssuedAt(new Date(System.currentTimeMillis()))
+                .setExpiration(new Date(System.currentTimeMillis() + expiration))
+                .signWith(key, SignatureAlgorithm.HS256)
+                .compact();
+    }
+
+    public String extractUsername(String token) {
+        return Jwts.parserBuilder()
+                .setSigningKey(key)
+                .build()
+                .parseClaimsJws(token)
+                .getBody()
+                .getSubject();
+    }
+
+    public boolean validateToken(String token, UserDetails userDetails) {
+        final String username = extractUsername(token);
+        return (username.equals(userDetails.getUsername()) && !isTokenExpired(token));
+    }
+
+    private boolean isTokenExpired(String token) {
+        Date expirationDate = Jwts.parserBuilder()
+                .setSigningKey(key)
+                .build()
+                .parseClaimsJws(token)
+                .getBody()
+                .getExpiration();
+        return expirationDate.before(new Date());
+    }
+}
+======== C:\Users\seeni\OneDrive\Documents\warning_system\warning_system\src\main\java\com\example\warning_system\service\NotificationService.java ======== 
+package com.example.warning_system.service;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.scheduling.annotation.Async;
+import org.springframework.stereotype.Service;
+
+@Service
+public class NotificationService {
+
+    private static final Logger logger = LoggerFactory.getLogger(NotificationService.class);
+
+    public NotificationService() {
+        // No mailSender needed anymore
+    }
+
+    // Send WhatsApp / SMS notification asynchronously
+    @Async
+    public void sendWhatsApp(String phone, String message) {
+        try {
+            // Here you can call TwilioService or any WhatsApp API integration
+            // For now, just logging
+            logger.info("WhatsApp sent to {}: {}", phone, message);
+        } catch (Exception e) {
+            logger.error("Failed to send WhatsApp to {}: {}", phone, e.getMessage());
+        }
+    }
+
+    @Async
+    public void sendSMS(String phone, String message) {
+        try {
+            // For SMS (Twilio or mock)
+            logger.info("SMS sent to {}: {}", phone, message);
+        } catch (Exception e) {
+            logger.error("Failed to send SMS to {}: {}", phone, e.getMessage());
+        }
+    }
+}
+======== C:\Users\seeni\OneDrive\Documents\warning_system\warning_system\src\main\java\com\example\warning_system\service\SensorDataIngestionService.java ======== 
+package com.example.warning_system.service;
+import com.example.warning_system.model.Alert;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.springframework.amqp.rabbit.annotation.RabbitListener;
+import org.springframework.stereotype.Service;
+import org.springframework.web.client.RestTemplate;
+
+import java.time.LocalDateTime;
+import java.util.Map;
+
+@Service
+public class SensorDataIngestionService {
+
+    @RabbitListener(queues = "sensor.queue")
+    public void receiveSensorData(String message) {
+        try {
+            ObjectMapper mapper = new ObjectMapper();
+            Map<String, Object> msg = mapper.readValue(message, Map.class);
+
+            // Post to AI microservice
+            RestTemplate rest = new RestTemplate();
+            Map prediction = rest.postForObject("http://localhost:5001/predict", msg, Map.class);
+
+            // Save prediction as alert (pseudo, use repository as needed)
+            // Build Alert object
+            Alert alert = new Alert();
+            alert.setDisasterType(prediction.get("disaster_type").toString());
+            alert.setSeverityScore(Double.parseDouble(prediction.get("severity").toString()));
+            alert.setConfidence(Double.parseDouble(prediction.get("confidence").toString()));
+            alert.setLocation(prediction.get("location").toString());
+            alert.setLatitude(msg.get("latitude") != null ? Double.parseDouble(msg.get("latitude").toString()) : null);
+            alert.setLongitude(msg.get("longitude") != null ? Double.parseDouble(msg.get("longitude").toString()) : null);
+            alert.setDescription("Sensor AI prediction");
+            alert.setTimestamp(LocalDateTime.now());
+            alert.setStatus("ACTIVE");
+            // Save with alertRepository.save(alert);
+
+            System.out.println("AI-based alert auto-generated and saved.");
+        } catch (Exception ex) {
+            ex.printStackTrace();
+        }
+    }
+
+}
+======== C:\Users\seeni\OneDrive\Documents\warning_system\warning_system\src\main\java\com\example\warning_system\service\TwilioService.java ======== 
+package com.example.warning_system.service;
+
+import com.twilio.Twilio;
+import com.twilio.rest.api.v2010.account.Message;
+import com.twilio.type.PhoneNumber;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.scheduling.annotation.Async;
+import org.springframework.stereotype.Service;
+
+import jakarta.annotation.PostConstruct;
+
+@Service
+public class TwilioService {
+
+    @Value("${twilio.sid}")
+    private String accountSid;
+
+    @Value("${twilio.token}")
+    private String authToken;
+
+    @Value("${twilio.from}")
+    private String fromNumber; // Example: +14155238886
+
+    @PostConstruct
+    public void initTwilio() {
+        Twilio.init(accountSid, authToken);
+    }
+
+    @Async
+    public void sendWhatsAppMessage(String to, String body) {
+        // to should be plain digits from DB like 9865658539
+        String formattedTo = to.startsWith("+") ? "whatsapp:" + to : "whatsapp:+91" + to;
+        String formattedFrom = "whatsapp:" + fromNumber;
+
+        Message.creator(
+                new PhoneNumber(formattedTo),
+                new PhoneNumber(formattedFrom),
+                body
+        ).create();
+
+        System.out.println("WhatsApp message sent to " + formattedTo);
+    }
+}
+======== C:\Users\seeni\OneDrive\Documents\warning_system\warning_system\src\main\java\com\example\warning_system\service\WeatherIngestionService.java ======== 
+package com.example.warning_system.service;
+
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.stereotype.Service;
+import org.springframework.web.client.RestTemplate;
+
+import java.util.List;
+import java.util.Map;
+
+@Service
+public class WeatherIngestionService {
+    private final RestTemplate rest = new RestTemplate();
+    private final ObjectMapper mapper = new ObjectMapper();
+    // inject repository or message queue (RabbitTemplate) to push data to AI pipeline
+
+    @Value("${openweather.apikey}")
+    private String apiKey;
+
+    @Scheduled(fixedRateString = "${weather.poll.interval:60000}")
+    public void pollWeather() {
+        try {
+            String city = "Chennai";
+            String url = String.format("https://api.openweathermap.org/data/2.5/weather?q=%s&appid=%s&units=metric", city, apiKey);
+            String resp = rest.getForObject(url, String.class);
+            JsonNode root = mapper.readTree(resp);
+            double rain1h = root.path("rain").path("1h").asDouble(0.0);
+            // Create payload for AI microservice
+            Map<String,Object> payload = Map.of("location", city, "sequence", List.of(rain1h)); // extend to real timeseries
+            // POST to AI service:
+            rest.postForEntity("http://localhost:5001/predict", payload, String.class);
+        } catch (Exception ex) {
+            ex.printStackTrace();
+        }
+    }
+}
